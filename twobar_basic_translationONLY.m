@@ -13,6 +13,8 @@ m = 5; % mass of the object
 xL = [1;0];
 yL = [0;1];
 x = [xL yL];
+R = @(theta) [cos(theta) -sin(theta);
+    sin(theta) cos(theta)];
 
 %% Visualize Test
 q0 = [0 0 0 0 0 2*d]'; % initial position of the system (6x1)
@@ -24,6 +26,10 @@ q0 = [0 0 0 0 0 2*d]'; % initial position of the system (6x1)
 % visualize(q0);
 % axis equal
 %% Get the Jacobian
+R = @(theta) [cos(theta) sin(theta) 0;
+    -sin(theta) cos(theta) 0;
+    0 0 1];
+
 syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
 
 % gen coords for rigid body B, COM position and orientation about the COM
@@ -41,46 +47,37 @@ syms m % uniform mass for all bodies
 
 X_brac = @(x,y) [0 0 y; 0 0 -x; -y x 0]; % skew function
 
-R = @(theta) [cos(theta) sin(theta) 0;
-    -sin(theta) cos(theta) 0;
-    0 0 1];
-
 v_a = R(th_a)*X_brac(p1_a, p2_a)'*R(th_a)'*[0;0;w_a];
 v_b = R(th_b)*X_brac(p1_b, p2_b)'*R(th_b)'*[0;0;w_b];
 
 % get the velocity of the joint in world space
-v_a = qdot_a(2:3, :) + v_a(1:2, :);
-v_b = qdot_b(2:3, :) + v_b(1:2, :);
+v_a = qdot_a(2:3, :);% + v_a(1:2, :);
+v_b = qdot_b(2:3, :);% + v_b(1:2, :);
 
 % Constraint
-C = (v_a - v_b);
+C = v_a - v_b;
 
 % Constraint Jacobian
-J = [jacobian(C, qdot_a) jacobian(C, qdot_b)]; % (2x6)
-%J = [jacobian(C, qdot)]; % (2x6)
+%J = [jacobian(C, qdot_a) jacobian(C, qdot_b)]; % (2x6)
+J = [jacobian(C, qdot)]; % (2x6)
 Jfunc = matlabFunction(J);
 
 %% Time Integration
-Fext = [0 0 0 0 0 5]';
-dt = 0.1;
-time = 3;
-tall = 1:dt:time;
-stps = time/dt;
+dt = 0.5;
+tall = 1:dt:3*2*pi;
 m = 1;
 M = eye(6)*m;
-p1_a_val = 0;
-p2_a_val = d;
-p1_b_val = 0;
-p2_b_val = -d;
+p1_a = 0;
+p2_a = d;
+p1_b = 0;
+p2_b = -d;
 
 A = J*inv(M)*J';
 Afunc = matlabFunction(A);
+dt = 0.1;
 
-q_val = q0; % initial position of the system
-qdot_val = [0 0 0 0 0 0]'; % initial velocity of the system
-
-allConstrF = zeros(6,stps);
-extF = zeros(6,stps);
+q = q0; % initial position of the system
+qdot = [0 0 0 0 0 0]'; % initial velocity of the system
 
 vid = VideoWriter('video.avi');
 open(vid);
@@ -90,55 +87,20 @@ hold on
 xlim([-15 15])
 ylim([-5 20])
 grid on
-i = 1;
 for t=tall
+    Fext = [0 0 0 0 -5 0]';
     t
-    Jval = Jfunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(3));
-    visualize(q_val);
+    Jval = Jfunc();%(p1_a,p1_b,p2_a,p2_b,q(1),q(3));
+    visualize(q);
     bval = -(Jval*inv(M)*Fext);
-    Aval = Afunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(3));
-    lambda = Aval\bval; %inv(Aval)*bval;
-    qddot_val = inv(M)*Jval'*lambda + inv(M)*Fext; % (6x1) update the velocity
-    allConstrF(:,i) = inv(M)*Jval'*lambda;
-    extF(:,i) = inv(M)*Fext;
-    [q_val, qdot_val] = forwardeuler(q_val, qdot_val, qddot_val, dt);
+    Aval = Afunc();%p1_a,p1_b,p2_a,p2_b,q(1),q(3));
+    lambda = Aval\bval;
+    qddot = inv(M)*Jval'*lambda + inv(M)*Fext % (6x1) update the velocity
+    qdot
+    [q, qdot] = forwardeuler(q, qdot, qddot, dt);
     
     frame = getframe(gcf);
     writeVideo(vid,frame);
     cla
-    i=i+1;
 end
 close(vid);
-
-%%
-% Plot the constraint forces 
-
-figure(3)
-
-subplot(3,1,1)
-hold on
-title("Forces in x")
-plot(allConstrF(2, :), 'r')
-plot(allConstrF(5, :), 'b')
-plot(extF(2, :), 'm')
-plot(extF(5, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
-
-subplot(3,1,2)
-hold on
-title("Forces in y")
-plot(allConstrF(3, :), 'r')
-plot(allConstrF(6, :), 'b')
-plot(extF(3, :), 'm')
-plot(extF(6, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
-
-subplot(3,1,3)
-hold on
-title("Torques")
-plot(allConstrF(1, :), 'r')
-plot(allConstrF(4, :), 'b')
-plot(extF(1, :), 'm')
-plot(extF(4, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
-
