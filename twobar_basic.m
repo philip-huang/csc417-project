@@ -1,4 +1,5 @@
 close all
+clear all;
 clear
 %% Rigid-body bar link parameters
 COM_init = [0 0]; % center of mass
@@ -48,9 +49,17 @@ R = @(theta) [cos(theta) sin(theta) 0;
 v_a = R(th_a)*X_brac(p1_a, p2_a)'*R(th_a)'*[0;0;w_a];
 v_b = R(th_b)*X_brac(p1_b, p2_b)'*R(th_b)'*[0;0;w_b];
 
+dRdt = @(theta) [-sin(theta) cos(theta);
+              -cos(theta) -sin(theta)];
+
+v2d_a = dRdt(th_a) * [p1_a; p2_a] * w_a;
+v2d_b = dRdt(th_b) * [p1_b; p2_b] * w_b;
+% x_p = R(the) * p_b +  x_c
+% v_p = dR/dtheta * w * p_b + v_c
+%%
 % get the velocity of the joint in world space
-v_a = qdot_a(2:3, :) + v_a(1:2, :);
-v_b = qdot_b(2:3, :) + v_b(1:2, :);
+v_a = qdot_a(2:3) + v2d_a;
+v_b = qdot_b(2:3) + v2d_b;
 
 % Constraint
 C = (v_a - v_b);
@@ -82,6 +91,7 @@ qdot_val = [0 0 0 0 0 0]'; % initial velocity of the system
 allConstrF = zeros(6,stps);
 extF = zeros(6,stps);
 
+%% Run 
 vid = VideoWriter('video.avi');
 open(vid);
 
@@ -93,10 +103,10 @@ grid on
 i = 1;
 for t=tall
     t
-    Jval = Jfunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(3));
+    Jval = Jfunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(4));
     visualize(q_val);
     bval = -(Jval*inv(M)*Fext);
-    Aval = Afunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(3));
+    Aval = Afunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(4));
     lambda = Aval\bval; %inv(Aval)*bval;
     qddot_val = inv(M)*Jval'*lambda + inv(M)*Fext; % (6x1) update the velocity
     allConstrF(:,i) = inv(M)*Jval'*lambda;
