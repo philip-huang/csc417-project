@@ -44,6 +44,7 @@ qddot_b = [alpha_b; a1_bc; a2_bc];
 qddot = [qddot_a; qddot_b];
 
 syms m % uniform mass for all bodies
+syms ks kd %spring and damping constants
 
 % derive Jacobian from position constriant - get the same J
 R2 = @(theta) [cos(theta) -sin(theta);
@@ -56,17 +57,14 @@ x_b = R2(th_b) * [p1_b; p2_b] + [p1_bc; p2_bc];
 % Cddot(q) = dC/dq * qddot + dCdot/dq * qdot = 0
 Csym = x_a - x_b;
 Jsym = jacobian(Csym, q);
-dRdt = @(theta) [-sin(theta) -cos(theta);
-              cos(theta) -sin(theta)];
-
 
 Cdot_sym = Jsym * qdot;
 
 % c = dCdot/dq * qdot = dJ/dq * qdot * qdot
 % only depends on th_a and th_b
 
-c_sym = jacobian(Cdot_sym, q) * qdot;
-Cddot_sym = Jsym * qddot + c_sym;
+c_sym = jacobian(Cdot_sym, q) * qdot + ks * Csym + kd * Cdot_sym;
+Cddot_sym = Jsym * qddot + jacobian(Cdot_sym, q) * qdot;
 
 cfunc = matlabFunction(c_sym);
 Cfunc = matlabFunction(Csym);
@@ -74,11 +72,12 @@ Jfunc = matlabFunction(Jsym);
 Cddotfunc = matlabFunction(Cddot_sym);
 Cdotfunc = matlabFunction(Cdot_sym);
 %% Time Integration
-Fext = [0 0 0 0 5 0]';
+Fext = [-10 0 0 10 0 0]';
 dt = 0.1;
 time = 5;
 tall = 1:dt:time;
 stps = time/dt;
+
 m = 1;
 I = m * (w * w + h * h) / 12.0;
 M = eye(6)*m;
@@ -88,6 +87,10 @@ p1_a = 0;
 p2_a = d;
 p1_b = 0;
 p2_b = -d;
+
+ks = 100;
+kd = 10;
+
 Asym = Jsym*inv(M)*Jsym';
 Afunc = matlabFunction(Asym);
 
@@ -115,7 +118,8 @@ for i=1:size(tall, 2)
     t = tall(i);
     J = Jfunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
     visualize(q);
-    c = cfunc(p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(1), qdot(4));
+    c = cfunc(kd, ks, p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4), ...
+        qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
     b = -(J*inv(M)*extF(:, i) + c);
     A = Afunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
     lambda = A\b; %inv(A)*b;
@@ -130,18 +134,17 @@ for i=1:size(tall, 2)
     % debug information
     Cdot = Cdotfunc(p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
     C = Cfunc(p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4));
-
+    q;
 
     frame = getframe(gcf);
     writeVideo(vid,frame);
     cla
-    i=i+1;
 end
 close(vid);
 
 %%
 % Plot the constraint forces 
-
+visualize(q);
 figure(3)
 
 subplot(3,1,1)

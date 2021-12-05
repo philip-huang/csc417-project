@@ -13,15 +13,15 @@ function [barout, COMout, ax] = getBar(COM,w,h,j,d,p,th)
     
     polyin = polyshape({x1,x2,x3},{y1,y2,y3});
     polyout = translate(polyin,p);
-    barout = rotate(polyout,th,COM+p); % rotation is always about COM of rigid body
+    barout = rotate(polyout,rad2deg(th),COM+p); % rotation is always about COM of rigid body
     COMout = COM+p;
 
     % Define translation frame of each rigid body
     xcol = [1;0];
     ycol = [0;1];
     x = [xcol ycol];
-    R = @(theta) [cosd(theta) sind(theta);
-        -sind(theta) cosd(theta)];
+    R = @(theta) [cosd(theta) -sind(theta);
+        sind(theta) cosd(theta)];
     xcol = R(th)*xcol;
     ycol = R(th)*ycol;
     ax = R(th)*x;
