@@ -72,7 +72,7 @@ Jfunc = matlabFunction(Jsym);
 Cddotfunc = matlabFunction(Cddot_sym);
 Cdotfunc = matlabFunction(Cdot_sym);
 %% Time Integration
-Fext = [-10 0 0 10 0 0]';
+Fext = [-10 0 10 10 20 0]';
 dt = 0.1;
 time = 5;
 tall = 1:dt:time;
