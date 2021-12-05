@@ -38,58 +38,69 @@ qdot_a = [w_a; v1_ac; v2_ac];
 qdot_b = [w_b; v1_bc; v2_bc];
 qdot = [qdot_a; qdot_b];
 
+syms alpha_a a1_ac a2_ac alpha_b a1_bc a2_bc real % angular acc and acc of the rigid body COM in the world frame 
+qddot_a = [alpha_a; a1_ac; a2_ac]; 
+qddot_b = [alpha_b; a1_bc; a2_bc];
+qddot = [qddot_a; qddot_b];
+
 syms m % uniform mass for all bodies
 
-X_brac = @(x,y) [0 0 y; 0 0 -x; -y x 0]; % skew function
+% derive Jacobian from position constriant - get the same J
+R2 = @(theta) [cos(theta) -sin(theta);
+    sin(theta) cos(theta)];
+x_a = R2(th_a) * [p1_a; p2_a] + [p1_ac; p2_ac];
+x_b = R2(th_b) * [p1_b; p2_b] + [p1_bc; p2_bc];
 
-R = @(theta) [cos(theta) sin(theta) 0;
-    -sin(theta) cos(theta) 0;
-    0 0 1];
+% C(q) = 0
+% Cdot(q) = dC/dq * qdot = 0
+% Cddot(q) = dC/dq * qddot + dCdot/dq * qdot = 0
+Csym = x_a - x_b;
+Jsym = jacobian(Csym, q);
+dRdt = @(theta) [-sin(theta) -cos(theta);
+              cos(theta) -sin(theta)];
 
-v_a = R(th_a)*X_brac(p1_a, p2_a)'*R(th_a)'*[0;0;w_a];
-v_b = R(th_b)*X_brac(p1_b, p2_b)'*R(th_b)'*[0;0;w_b];
 
-dRdt = @(theta) [-sin(theta) cos(theta);
-              -cos(theta) -sin(theta)];
+Cdot_sym = Jsym * qdot;
 
-v2d_a = dRdt(th_a) * [p1_a; p2_a] * w_a;
-v2d_b = dRdt(th_b) * [p1_b; p2_b] * w_b;
-% x_p = R(the) * p_b +  x_c
-% v_p = dR/dtheta * w * p_b + v_c
-%%
-% get the velocity of the joint in world space
-v_a = qdot_a(2:3) + v2d_a;
-v_b = qdot_b(2:3) + v2d_b;
+% c = dCdot/dq * qdot = dJ/dq * qdot * qdot
+% only depends on th_a and th_b
 
-% Constraint
-C = (v_a - v_b);
+c_sym = jacobian(Cdot_sym, q) * qdot;
+Cddot_sym = Jsym * qddot + c_sym;
 
-% Constraint Jacobian
-J = [jacobian(C, qdot_a) jacobian(C, qdot_b)]; % (2x6)
-%J = [jacobian(C, qdot)]; % (2x6)
-Jfunc = matlabFunction(J);
-
+cfunc = matlabFunction(c_sym);
+Cfunc = matlabFunction(Csym);
+Jfunc = matlabFunction(Jsym);
+Cddotfunc = matlabFunction(Cddot_sym);
+Cdotfunc = matlabFunction(Cdot_sym);
 %% Time Integration
-Fext = [0 0 0 0 0 5]';
+Fext = [0 0 0 0 5 0]';
 dt = 0.1;
-time = 3;
+time = 5;
 tall = 1:dt:time;
 stps = time/dt;
 m = 1;
+I = m * (w * w + h * h) / 12.0;
 M = eye(6)*m;
-p1_a_val = 0;
-p2_a_val = d;
-p1_b_val = 0;
-p2_b_val = -d;
+M(1, 1) = I;
+M(4, 4) = I;
+p1_a = 0;
+p2_a = d;
+p1_b = 0;
+p2_b = -d;
+Asym = Jsym*inv(M)*Jsym';
+Afunc = matlabFunction(Asym);
 
-A = J*inv(M)*J';
-Afunc = matlabFunction(A);
 
-q_val = q0; % initial position of the system
-qdot_val = [0 0 0 0 0 0]'; % initial velocity of the system
-
+q = q0; % initial position of the system
+qdot = [0 0 0 0 0 0]'; % initial velocity of the system
+%           w vx vy ...
 allConstrF = zeros(6,stps);
+% external force only applies for an initial period of time
 extF = zeros(6,stps);
+for t=1:1
+    extF(:, t) = Fext;
+end
 
 %% Run 
 vid = VideoWriter('video.avi');
@@ -100,19 +111,27 @@ hold on
 xlim([-15 15])
 ylim([-5 20])
 grid on
-i = 1;
-for t=tall
-    t
-    Jval = Jfunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(4));
-    visualize(q_val);
-    bval = -(Jval*inv(M)*Fext);
-    Aval = Afunc(p1_a_val,p1_b_val,p2_a_val,p2_b_val,q_val(1),q_val(4));
-    lambda = Aval\bval; %inv(Aval)*bval;
-    qddot_val = inv(M)*Jval'*lambda + inv(M)*Fext; % (6x1) update the velocity
-    allConstrF(:,i) = inv(M)*Jval'*lambda;
-    extF(:,i) = inv(M)*Fext;
-    [q_val, qdot_val] = forwardeuler(q_val, qdot_val, qddot_val, dt);
+for i=1:size(tall, 2)
+    t = tall(i);
+    J = Jfunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
+    visualize(q);
+    c = cfunc(p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(1), qdot(4));
+    b = -(J*inv(M)*extF(:, i) + c);
+    A = Afunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
+    lambda = A\b; %inv(A)*b;
+    qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
+    allConstrF(:,i) = J'*lambda;
+
+    % debug information
+    Cddot = Cddotfunc(qddot(2), qddot(5), qddot(3), qddot(6), qddot(1), qddot(4), p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(1), qdot(4));
+
+    [q, qdot] = forwardeuler(q, qdot, qddot, dt);
     
+    % debug information
+    Cdot = Cdotfunc(p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
+    C = Cfunc(p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4));
+
+
     frame = getframe(gcf);
     writeVideo(vid,frame);
     cla
