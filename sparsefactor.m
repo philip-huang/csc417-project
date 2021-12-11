@@ -4,12 +4,9 @@ function [H, forwards] = sparsefactor(bodies,constraints, allnodes)
 % Input J: Jacobian matrix
 % return H
 
-% n: dim of constraints
-% m: dim of mass
-n = numel(bodies);
-m = numel(constraints);
-
+% allnodes1 should be the root node
 [forwards, backwards] = dfs(allnodes(1), allnodes, [], []);
+n = numel(forwards);
 
 % dim of block
 H = {};
@@ -33,8 +30,8 @@ for i=1:numel(forwards)
     end
 end
 
-for i = 1:numel(forwards)
-    node = allnodes(forwards(i))
+    for i = 1:numel(forwards)
+    node = allnodes(forwards(i));
     for kind = 1:numel(node.children)
         k = find(forwards==node.children(kind));
         H{i, i} = H{i, i} - H{k, i}'*H{k, k} * H{k, i};
