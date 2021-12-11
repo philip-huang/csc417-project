@@ -1,5 +1,5 @@
 function [barout, COMout, ax] = getBar(COM,w,h,j,d,p,th)
-    % Visualizes a 2D rectangular bar. 
+    % Returns the parameters needed to visualize a 2D rectangular bar. 
     % R: orientation of bar
     % p: position of COM of bar 
     % w: width
@@ -24,6 +24,5 @@ function [barout, COMout, ax] = getBar(COM,w,h,j,d,p,th)
         sin(-theta) cos(-theta)];
     xcol = R(th)*xcol;
     ycol = R(th)*ycol;
-    %ax = R(th)*x;
     ax = [xcol ycol];
 end

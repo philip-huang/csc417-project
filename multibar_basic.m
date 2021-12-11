@@ -16,32 +16,20 @@ yL = [0;1];
 x = [xL yL];
 
 %% Visualize Test (opened 4-bar linkage, to extend to with aux constrs)
-qtest = [pi/2 0 0 0 -d d pi/2 0 2*d pi/2 2*d 2*d]'; % initial position of the system (6x1)
 % (th_1, x_1, y_1, th_0, x_0, y_0, ..., th_n, x_n, y_n) th [degrees]
 % n = number of elements in the system
 % x,y position of COM of each body
 
+root = [pi/2,0,0]';
+relth =  [-pi/2 -pi/2 0]; % initial position of the system (6x1)
+q0 = generateInitCoords(root, relth, d);
 figure(3)
 hold on
 xlim([-15 15])
 ylim([-5 20])
 grid on
-[allCOM, allBars, allax] = visualizeBar(qtest,w,h,j,d,m);
-plot(allBars);
-plot(allCOM(:,1),allCOM(:,2),'b o')
-for i = 1:length(allCOM)
-    COM = allCOM(i,:);
-    ax = allax(:,:,i);
-    quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
-    quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
-end
-
-numBod = size(allCOM);
-for n = 1:numBod(1)
-    labels{n} = uint8(n);
-end 
-text(allCOM(:,1),allCOM(:,2),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-
+[allCOM, allBars, allax] = getAllBars(q0,w,h,j,d,m);
+visualizeAllBars(allCOM, allBars, allax);
 %% Get the Jacobian
 syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
 
@@ -50,16 +38,19 @@ syms th_a p1_ac p2_ac th_b p1_bc p2_bc real
 q_a = [th_a; p1_ac; p2_ac]; 
 q_b = [th_b; p1_bc; p2_bc];
 q = [q_a; q_b];
+%q = sym('q', [numBod 3], 'real'); 
 
 syms w_a v1_ac v2_ac w_b v1_bc v2_bc real % angular velocity and velocity of the rigid body COM in the world frame 
 qdot_a = [w_a; v1_ac; v2_ac]; 
 qdot_b = [w_b; v1_bc; v2_bc];
 qdot = [qdot_a; qdot_b];
+%qdot = sym('qdot', [numBod 3], 'real'); 
 
 syms alpha_a a1_ac a2_ac alpha_b a1_bc a2_bc real % angular acc and acc of the rigid body COM in the world frame 
 qddot_a = [alpha_a; a1_ac; a2_ac]; 
 qddot_b = [alpha_b; a1_bc; a2_bc];
 qddot = [qddot_a; qddot_b];
+%qddot = sym('qddot', [numBod 3], 'real'); 
 
 syms m % uniform mass for all bodies
 syms ks kd %spring and damping constants
@@ -113,7 +104,8 @@ Asym = Jsym*inv(M)*Jsym';
 Afunc = matlabFunction(Asym);
 
 %% Run 
-q0 = [0 0 0 0 0 2*d]';
+%q0 = [0 0 0 0 0 2*d]';
+q0 = [-pi/4 d d pi/4 2*d 2*d]';
 q = q0; % initial position of the system
 qdot = [0 0 0 0 0 0]'; % initial velocity of the system
 %           w vx vy ...
@@ -123,7 +115,6 @@ extF = zeros(6,stps);
 for t=1:1
     extF(:, t) = Fext;
 end
-
 
 vid = VideoWriter('video.avi');
 open(vid);
@@ -136,20 +127,10 @@ grid on
 for i=1:size(tall, 2)
     t = tall(i);
     J = Jfunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
-    %visualize(q);
-    %%%%
-    [allCOM, allBars, allax] = visualizeBar(q,w,h,j,d,m);
-    plot(allBars);
-    plot(allCOM(:,1),allCOM(:,2),'b o')
-    for k = 1:length(allCOM)
-        COM = allCOM(k,:);
-        ax = allax(:,:,k);
-        quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
-        quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
-    end
-    labels = {'A','B'};
-    text(allCOM(1,:),allCOM(2,:),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
-    %%%%
+
+    [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
+    visualizeAllBars(allCOM, allBars, allax);
+
     c = cfunc(kd, ks, p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4), ...
         qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
     b = -(J*inv(M)*extF(:, i) + c);
@@ -173,35 +154,3 @@ for i=1:size(tall, 2)
     cla
 end
 close(vid);
-
-%%
-% Plot the constraint forces 
-visualize(q);
-figure(3)
-
-subplot(3,1,1)
-hold on
-title("Forces in x")
-plot(allConstrF(2, :), 'r')
-plot(allConstrF(5, :), 'b')
-plot(extF(2, :), 'm')
-plot(extF(5, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
-
-subplot(3,1,2)
-hold on
-title("Forces in y")
-plot(allConstrF(3, :), 'r')
-plot(allConstrF(6, :), 'b')
-plot(extF(3, :), 'm')
-plot(extF(6, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
-
-subplot(3,1,3)
-hold on
-title("Torques")
-plot(allConstrF(1, :), 'r')
-plot(allConstrF(4, :), 'b')
-plot(extF(1, :), 'm')
-plot(extF(4, :), '--g')
-legend('A constraint', 'B constraint', 'A external', 'B external')
