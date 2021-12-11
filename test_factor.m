@@ -46,19 +46,19 @@ J = c1.D;
 
 H_d = zeros(8, 8);
 H_d(1:6, 1:6) = M;
-H_d(7:8, 1:6) = J;
-H_d(1:6, 7:8) = J';
+H_d(7:8, 1:6) = -J;
+H_d(1:6, 7:8) = -J';
 
 b_d = cell2mat(b);
 x_d = H_d \ b_d
 
 % dense solve
-[H, H_tree, forwards] = densefactor(bodies, constraints, allnodes);
+[H, H_tree, forwards] = densefactor(allnodes);
 x = densesolve(H, b, forwards);
 cell2mat(x)
 
 % sparse solve
-[H, forwards] = sparsefactor(bodies, constraints, allnodes);
+[H, forwards] = sparsefactor(allnodes);
 x = sparsesolve(H, b, allnodes, forwards);
 cell2mat(x)
 
@@ -94,18 +94,18 @@ b{11, 1} = [-4; -1];
 
 % direct solve
 [M, J] = get_M_J(bodies, constraints);
-H = [M, J';
-    J, zeros(size(J, 1))];
+H = [M, -J';
+    -J, zeros(size(J, 1))];
 bd = cell2mat(b);
 x_direct = H \bd;
 
 % dense solve
-[H, H_tree, forwards] = densefactor(bodies, constraints, allnodes);
+[H, H_tree, forwards] = densefactor(allnodes);
 x = densesolve(H, b, forwards);
 xdense = cell2mat(x);
 
 % sparse solve
-[H, forwards] = sparsefactor(bodies, constraints, allnodes);
+[H, forwards] = sparsefactor(allnodes);
 x = sparsesolve(H, b, allnodes, forwards);
 xsparse = cell2mat(x);
 

@@ -95,6 +95,14 @@ kd = 10;
 Asym = Jsym*inv(M)*Jsym';
 Afunc = matlabFunction(Asym);
 
+% define bodies and constraints
+b1 = make_test_body(1, M(1:3, 1:3), -1, [3]);
+b2 = make_test_body(2, M(4:6, 4:6), 3, []);
+c1 = make_constraint(3, 0, 1, [2]);
+bodies = [b1 b2];
+constraints = [c1];
+allnodes = [bodies constraints];
+z = {zeros(3, 1); zeros(3, 1); zeros(2, 1)};
 
 q = q0; % initial position of the system
 qdot = [0 0 0 0 0 0]'; % initial velocity of the system
@@ -122,8 +130,14 @@ for i=1:size(tall, 2)
     c = cfunc(kd, ks, p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4), ...
         qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
     b = -(J*inv(M)*extF(:, i) + c);
-    A = Afunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
-    lambda = A\b; %inv(A)*b;
+
+    allnodes(3).D = J;
+    z{3} = -b;
+    [H, forwards] = sparsefactor(allnodes);
+    ylamb = sparsesolve(H, z, allnodes, forwards);
+    lambda = cell2mat(ylamb(size(J, 1)+1:end));
+%     A = Afunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
+%     lambda = A\b; %inv(A)*b;
     qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
     allConstrF(:,i) = J'*lambda;
 
@@ -175,3 +189,21 @@ plot(extF(1, :), 'm')
 plot(extF(4, :), '--g')
 legend('A constraint', 'B constraint', 'A external', 'B external')
 
+
+function [body] = make_test_body(i, M, p, c)
+    body.i = i;
+    body.dim = size(M, 1);
+    body.isConstraint = 0;
+    body.D = M;
+    body.parent = p;
+    body.children = c;
+end
+
+function [constraint] = make_constraint(i, J, p, c)
+    constraint.i = i;
+    constraint.dim = size(J, 1);
+    constraint.isConstraint = 1;
+    constraint.D = J;
+    constraint.parent = p;
+    constraint.children = c;
+end
