@@ -15,16 +15,11 @@ xL = [1;0];
 yL = [0;1];
 x = [xL yL];
 
-%% Visualize Test
-qtest = [0 0 0 0 0 2*d]';
-%q0 = [-pi/2 0 0 0 0 2*d]'; % initial position of the system (6x1)
-% (th_a, x_a, y_a, th_b, x_b, y_b) th [degrees]
+%% Visualize Test (opened 4-bar linkage, to extend to with aux constrs)
+qtest = [pi/2 0 0 0 -d d pi/2 0 2*d pi/2 2*d 2*d]'; % initial position of the system (6x1)
+% (th_1, x_1, y_1, th_0, x_0, y_0, ..., th_n, x_n, y_n) th [degrees]
+% n = number of elements in the system
 % x,y position of COM of each body
-
-% figure (2)
-% hold on
-% visualize(q0);
-% axis equal
 
 figure(3)
 hold on
@@ -33,16 +28,20 @@ ylim([-5 20])
 grid on
 [allCOM, allBars, allax] = visualizeBar(qtest,w,h,j,d,m);
 plot(allBars);
-plot(allCOM(1,:),allCOM(2,:),'b o')
+plot(allCOM(:,1),allCOM(:,2),'b o')
 for i = 1:length(allCOM)
-    COM = allCOM(:,i);
+    COM = allCOM(i,:);
     ax = allax(:,:,i);
     quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
     quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
 end
 
-labels = {'A','B'};
-text(allCOM(1,:),allCOM(2,:),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+numBod = size(allCOM);
+for n = 1:numBod(1)
+    labels{n} = uint8(n);
+end 
+text(allCOM(:,1),allCOM(:,2),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+
 %% Get the Jacobian
 syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
 
@@ -141,9 +140,9 @@ for i=1:size(tall, 2)
     %%%%
     [allCOM, allBars, allax] = visualizeBar(q,w,h,j,d,m);
     plot(allBars);
-    plot(allCOM(1,:),allCOM(2,:),'b o')
+    plot(allCOM(:,1),allCOM(:,2),'b o')
     for k = 1:length(allCOM)
-        COM = allCOM(:,k);
+        COM = allCOM(k,:);
         ax = allax(:,:,k);
         quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
         quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
