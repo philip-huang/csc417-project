@@ -1,0 +1,234 @@
+close all
+clear all;
+clear
+%% Get the Jacobian
+syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
+
+% gen coords for rigid body B, COM position and orientation about the COM
+syms th_a p1_ac p2_ac th_b p1_bc p2_bc real 
+q_a = [th_a; p1_ac; p2_ac]; 
+q_b = [th_b; p1_bc; p2_bc];
+q = [q_a; q_b];
+
+syms w_a v1_ac v2_ac w_b v1_bc v2_bc real % angular velocity and velocity of the rigid body COM in the world frame 
+qdot_a = [w_a; v1_ac; v2_ac]; 
+qdot_b = [w_b; v1_bc; v2_bc];
+qdot = [qdot_a; qdot_b];
+
+syms alpha_a a1_ac a2_ac alpha_b a1_bc a2_bc real % angular acc and acc of the rigid body COM in the world frame 
+qddot_a = [alpha_a; a1_ac; a2_ac];
+qddot_b = [alpha_b; a1_bc; a2_bc];
+qddot = [qddot_a; qddot_b];
+
+syms m % uniform mass for all bodies
+syms ks kd %spring and damping constants
+
+% derive Jacobian from position constriant - get the same J
+R2 = @(theta) [cos(theta) -sin(theta);
+    sin(theta) cos(theta)];
+x_a = R2(th_a) * [p1_a; p2_a] + [p1_ac; p2_ac];
+x_b = R2(th_b) * [p1_b; p2_b] + [p1_bc; p2_bc];
+
+% C(q) = 0
+% Cdot(q) = dC/dq * qdot = 0
+% Cddot(q) = dC/dq * qddot + dCdot/dq * qdot = 0
+Csym = x_a - x_b;
+Jsym = jacobian(Csym, q);
+
+Cdot_sym = Jsym * qdot;
+
+% c = dCdot/dq * qdot = dJ/dq * qdot * qdot
+% only depends on th_a and th_b
+
+c_sym = jacobian(Cdot_sym, q) * qdot + ks * Csym + kd * Cdot_sym;
+Cddot_sym = Jsym * qddot + jacobian(Cdot_sym, q) * qdot;
+
+cfunc = matlabFunction(c_sym);
+Cfunc = matlabFunction(Csym);
+Jfunc = matlabFunction(Jsym);
+Cddotfunc = matlabFunction(Cddot_sym);
+Cdotfunc = matlabFunction(Cdot_sym);
+
+%% Jacobian of aux constraint
+
+aend = R2(th_a) * [p1_a; -p2_a] + [p1_ac; p2_ac];
+a = [0; 0];
+
+Ca = aend - [0; -2];
+Ja = jacobian(Ca, q);
+
+Ca_dot = Ja * qdot;
+ca_sym = jacobian(Ca_dot, q) * qdot + ks * Ca + kd * Ca_dot;
+Ca_ddot = Ja * qddot + jacobian(Ca_dot, q) * qdot;
+
+Jafunc = matlabFunction(Ja);
+ca_symfunc = matlabFunction(ca_sym);
+%% Time Integration
+Fext = [-10 0 10 10 20 0]';
+dt = 0.1;
+time = 5;
+tall = 1:dt:time;
+stps = time/dt;
+
+% Rigid-body bar link parameters
+m = 1;
+w = 1; % width of rigid body
+h = 5; % height of rigid body
+d = 2; % distance of the joint holes away from COM, the joint holes on 
+       % both sides are the same distance away from the COM
+
+I = m * (w * w + h * h) / 12.0;
+M = eye(6)*m;
+M(1, 1) = I;
+M(4, 4) = I;
+p1_a = 0;
+p2_a = d;
+p1_b = 0;
+p2_b = -d;
+
+ks = 100;
+kd = 10;
+
+Asym = Jsym*inv(M)*Jsym';
+Afunc = matlabFunction(Asym);
+
+% define bodies and constraints
+b1 = make_test_body(1, M(1:3, 1:3), -1, [3]);
+b2 = make_test_body(2, M(4:6, 4:6), 3, []);
+c1 = make_constraint(3, 0, 1, [2]);
+bodies = [b1 b2];
+constraints = [c1];
+allnodes = [bodies constraints];
+z = {zeros(3, 1); zeros(3, 1); zeros(2, 1)};
+
+q0 = [0 0 0 0 0 2*d]';
+q = q0; % initial position of the system
+qdot = [0 0 0 0 0 0]'; % initial velocity of the system
+%           w vx vy ...
+allConstrF = zeros(6,stps);
+% external force only applies for an initial period of time
+extF = zeros(6,stps);
+for t=1:1
+    extF(:, t) = Fext;
+end
+
+%% Run 
+vid = VideoWriter('video.avi');
+open(vid);
+
+figure(1)
+hold on
+xlim([-15 15])
+ylim([-5 20])
+grid on
+for i=1:size(tall, 2)
+    t = tall(i);
+    visualize(q);
+
+    % Get J, c, b for primary constraint
+    J = Jfunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
+    c = cfunc(kd, ks, p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4), ...
+        qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
+    b = -(J*inv(M)*extF(:, i) + c);
+
+    % solve lambda for primary constraint
+    allnodes(3).D = J;
+    [H, forwards] = sparsefactor(allnodes);
+    z{3} = -b;
+    ylamb = sparsesolve(H, z, allnodes, forwards);
+    lambda = cell2mat(ylamb(size(J, 1)+1:end));
+
+    % evaluate Ja K ca
+    vdot_aux = inv(M) * (J'*lambda + extF(:, i));
+    Ja = Jafunc(p1_a, p2_a, q(1));
+    K = Ja';
+    ca = ca_symfunc(kd, ks, p1_a, p2_a, q(2), q(3), q(1), qdot(2), qdot(3), qdot(1));
+    
+    % solve for M_hat * K
+    MhatK = zeros(size(K));
+    for k=1:size(K, 2)
+        b = -J * inv(M) * K(:, k);
+        z{3} = -b;
+        ylamb = sparsesolve(H, z, allnodes, forwards);
+        lambda = cell2mat(ylamb(size(J, 1)+1:end));
+        MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
+    end
+
+    % solve for mu (O (K^3))
+    mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
+    
+    % solve for primary response to Fext + K*mu
+    b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
+    z{3} = -b;
+    ylamb = sparsesolve(H, z, allnodes, forwards);
+    lambda = cell2mat(ylamb(size(J, 1)+1:end));
+    qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
+
+    allConstrF(:,i) = J'*lambda;
+
+    % debug information
+    Cddot = Cddotfunc(qddot(2), qddot(5), qddot(3), qddot(6), qddot(1), qddot(4), p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(1), qdot(4));
+
+    [q, qdot] = forwardeuler(q, qdot, qddot, dt);
+    
+    % debug information
+    Cdot = Cdotfunc(p1_a, p1_b, p2_a, p2_b, q(1), q(4), qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
+    C = Cfunc(p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4));
+    q;
+
+    frame = getframe(gcf);
+    writeVideo(vid,frame);
+    cla
+end
+close(vid);
+
+%%
+% Plot the constraint forces 
+visualize(q);
+figure(3)
+
+subplot(3,1,1)
+hold on
+title("Forces in x")
+plot(allConstrF(2, :), 'r')
+plot(allConstrF(5, :), 'b')
+plot(extF(2, :), 'm')
+plot(extF(5, :), '--g')
+legend('A constraint', 'B constraint', 'A external', 'B external')
+
+subplot(3,1,2)
+hold on
+title("Forces in y")
+plot(allConstrF(3, :), 'r')
+plot(allConstrF(6, :), 'b')
+plot(extF(3, :), 'm')
+plot(extF(6, :), '--g')
+legend('A constraint', 'B constraint', 'A external', 'B external')
+
+subplot(3,1,3)
+hold on
+title("Torques")
+plot(allConstrF(1, :), 'r')
+plot(allConstrF(4, :), 'b')
+plot(extF(1, :), 'm')
+plot(extF(4, :), '--g')
+legend('A constraint', 'B constraint', 'A external', 'B external')
+
+
+function [body] = make_test_body(i, M, p, c)
+    body.i = i;
+    body.dim = size(M, 1);
+    body.isConstraint = 0;
+    body.D = M;
+    body.parent = p;
+    body.children = c;
+end
+
+function [constraint] = make_constraint(i, J, p, c)
+    constraint.i = i;
+    constraint.dim = size(J, 1);
+    constraint.isConstraint = 1;
+    constraint.D = J;
+    constraint.parent = p;
+    constraint.children = c;
+end
