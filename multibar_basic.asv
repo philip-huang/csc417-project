@@ -16,7 +16,8 @@ yL = [0;1];
 x = [xL yL];
 
 %% Visualize Test
-q0 = [0 0 0 0 0 2*d]'; % initial position of the system (6x1)
+qtest = [0 0 0 0 0 2*d]';
+%q0 = [-pi/2 0 0 0 0 2*d]'; % initial position of the system (6x1)
 % (th_a, x_a, y_a, th_b, x_b, y_b) th [degrees]
 % x,y position of COM of each body
 
@@ -25,6 +26,23 @@ q0 = [0 0 0 0 0 2*d]'; % initial position of the system (6x1)
 % visualize(q0);
 % axis equal
 
+figure(3)
+hold on
+xlim([-15 15])
+ylim([-5 20])
+grid on
+[allCOM, allBars, allax] = visualizeBar(q,w,h,j,d,m);
+plot(allBars);
+plot(allCOM(1,:),allCOM(2,:),'b o')
+for i = 1:length(allCOM)
+    COM = allCOM(:,i);
+    ax = allax(:,:,i);
+    quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
+    quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
+end
+
+labels = {'A','B'};
+text(allCOM(1,:),allCOM(2,:),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
 %% Get the Jacobian
 syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
 
@@ -95,7 +113,7 @@ kd = 10;
 Asym = Jsym*inv(M)*Jsym';
 Afunc = matlabFunction(Asym);
 
-
+q0 = [0 0 0 0 0 2*d]';
 q = q0; % initial position of the system
 qdot = [0 0 0 0 0 0]'; % initial velocity of the system
 %           w vx vy ...
@@ -119,6 +137,19 @@ for i=1:size(tall, 2)
     t = tall(i);
     J = Jfunc(p1_a,p1_b,p2_a,p2_b,q(1),q(4));
     visualize(q);
+%     %%%%
+%     [allCOM, allBars, allax] = visualizeBar(q,w,h,j,d,m);
+%     plot(allBars);
+%     plot(allCOM(1,:),allCOM(2,:),'b o')
+%     for i = 1:length(allCOM)
+%         COM = allCOM(:,i);
+%         ax = allax(:,:,i);
+%         quiver(COM(1), COM(2), ax(1,1), ax(1,2),'color',[1 0 0])
+%         quiver(COM(1), COM(2), ax(2,1), ax(2,2),'color',[0 1 0])
+%     end
+%     labels = {'A','B'};
+%     text(allCOM(1,:),allCOM(2,:),labels,'VerticalAlignment','bottom','HorizontalAlignment','right')
+    %%%%
     c = cfunc(kd, ks, p1_a, p1_b, p2_a, p2_b, q(2), q(5), q(3), q(6), q(1), q(4), ...
         qdot(2), qdot(5), qdot(3), qdot(6), qdot(1), qdot(4));
     b = -(J*inv(M)*extF(:, i) + c);
@@ -174,4 +205,3 @@ plot(allConstrF(4, :), 'b')
 plot(extF(1, :), 'm')
 plot(extF(4, :), '--g')
 legend('A constraint', 'B constraint', 'A external', 'B external')
-

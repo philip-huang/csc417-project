@@ -20,9 +20,10 @@ function [barout, COMout, ax] = getBar(COM,w,h,j,d,p,th)
     xcol = [1;0];
     ycol = [0;1];
     x = [xcol ycol];
-    R = @(theta) [cosd(theta) -sind(theta);
-        sind(theta) cosd(theta)];
+    R = @(theta) [cos(-theta) -sin(-theta);
+        sin(-theta) cos(-theta)];
     xcol = R(th)*xcol;
     ycol = R(th)*ycol;
-    ax = R(th)*x;
+    %ax = R(th)*x;
+    ax = [xcol ycol];
 end
