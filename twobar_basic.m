@@ -24,6 +24,7 @@ q0 = [0 0 0 0 0 2*d]'; % initial position of the system (6x1)
 % hold on
 % visualize(q0);
 % axis equal
+
 %% Get the Jacobian
 syms p1_a p2_a p1_b p2_b real % joint coordinates in the body frame***
 

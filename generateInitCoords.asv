@@ -1,0 +1,20 @@
+function [q0] = generateInitCoords(root, relth, d)
+    % for SERIAL arm structures (for now). 
+    % root is the world coordinates of the root rigid body element
+    % relth is a vector of angular displacements between body elements
+    % d is the distance from the COM of the current body to the joint
+    % (aligned with the body frame y axis)
+
+    R = @(theta) [cos(theta) -sin(theta);
+    sin(theta) cos(theta)];
+
+    n = length(relth);
+    
+    q = zeros
+    for i = 1:n
+        q0(1) = root(1) + relth;
+        q0(2:3)= root(2:3) + R(root(1))*[0;d] + R(relth)*R(root(1))*[0;d];
+        q0 = q0';
+    end 
+    
+end
