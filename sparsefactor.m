@@ -1,4 +1,4 @@
-function [H, forwards] = sparsefactor(bodies,constraints, allnodes)
+function [H, forwards] = sparsefactor(allnodes)
 % Get H eq (10) from M and J
 % Input M: mass matrix
 % Input J: Jacobian matrix

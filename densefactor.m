@@ -1,4 +1,4 @@
-function [H, H_tree, forwards] = densefactor(bodies,constraints, allnodes, dofb, dofc)
+function [H, H_tree, forwards] = densefactor(allnodes)
 % Get H eq (10) from M and J
 % Input M: mass matrix
 % Input J: Jacobian matrix
@@ -32,13 +32,13 @@ for i=1:numel(forwards)
             if node.parent == forwards(j)
                 dimp = allnodes(node.parent).dim;
                 Jip = node.D(:, 1:dimp);
-                H{i, j} = Jip;
-                H{j, i} = Jip';
+                H{i, j} = -Jip;
+                H{j, i} = -Jip';
             elseif node.children(1) == forwards(j)
                 dimp = allnodes(node.parent).dim;
                 Jic = node.D(:, dimp+1:end);
-                H{i, j}= Jic;
-                H{j, i} = Jic';
+                H{i, j}= -Jic;
+                H{j, i} = -Jic';
             else
                 H{i, j} = zeros(node.dim, allnodes(forwards(j)).dim);
             end
