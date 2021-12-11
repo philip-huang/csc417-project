@@ -20,16 +20,17 @@ x = [xL yL];
 % n = number of elements in the system
 % x,y position of COM of each body
 
-root = [pi/2,0,0]';
-relth =  [-pi/2 -pi/2 0]; % initial position of the system (6x1)
-q0 = generateInitCoords(root, relth, d);
-figure(3)
-hold on
-xlim([-15 15])
-ylim([-5 20])
-grid on
-[allCOM, allBars, allax] = getAllBars(q0,w,h,j,d,m);
-visualizeAllBars(allCOM, allBars, allax);
+% root = [pi/2,0,0]';
+% relth =  [-pi/2 -pi/2 0]; % initial position of the system (6x1)
+% q0 = generateInitCoords(root, relth, d);
+% figure(3)
+% hold on
+% xlim([-15 15])
+% ylim([-5 20])
+% grid on
+% [allCOM, allBars, allax] = getAllBars(q0,w,h,j,d,m);
+% visualizeAllBars(allCOM, allBars, allax);
+
 %% Get the Jacobian
 % system definition!
 root = [0,0,0]';
@@ -40,9 +41,9 @@ numBod = length(q0)/3;
 % syms p1_a p2_a p1_b p2_b real 
 % each bar has 2 attachment points, there for (numBod)*2 joint points
 % pa = p1_a p2_a
-pa = sym('pa', [numBod*2 2], 'real'); % joint coordinates in the body frame***
+pa = sym('pa', [1 2], 'real'); % joint coordinates in the body frame***
 % pb = p1_b p2_b
-pb = sym('pb', [numBod*2 2], 'real');
+pb = sym('pb', [1 2], 'real');
 
 % syms th_a p1_ac p2_ac th_b p1_bc p2_bc real 
 % q_a = [th_a; p1_ac; p2_ac]; 
@@ -69,8 +70,10 @@ R2 = @(theta) [cos(theta) -sin(theta);
 % x_b = R2(th_b) * [p1_b; p2_b] + [p1_bc; p2_bc];
 
 % transform the joint coordinates in the body frame to the world frame
-xa = R2(q(1))*pa(2, :)' + q(1,2:3)';
-xb = R2(q(4))*pb(1, :)' + q(2,2:3)';
+%xa = R2(q(1))*pa(2, :)' + q(1,2:3)';
+%xb = R2(q(4))*pb(1, :)' + q(2,2:3)';
+xa = R2(q(1,1))*pa' + q(1,2:3)';
+xb = R2(q(2,1))*pb' + q(2,2:3)';
 
 % C(q) = 0
 % Cdot(q) = dC/dq * qdot = 0
@@ -80,11 +83,11 @@ xb = R2(q(4))*pb(1, :)' + q(2,2:3)';
 Csym = xa - xb;
 
 % flatten everything to vectors
-pa = (reshape(pa,numBod*2*2,1));
-pb = (reshape(pb,numBod*2*2,1));
-q = (reshape(q,numBod*3,1));
-qdot = (reshape(qdot,numBod*3,1));
-qddot = (reshape(qddot,numBod*3,1));
+% pa = (reshape(pa,numBod*2*2,1));
+% pb = (reshape(pb,numBod*2*2,1));
+q = (reshape(q',numBod*3,1));
+qdot = (reshape(qdot',numBod*3,1));
+qddot = (reshape(qddot',numBod*3,1));
 Jsym = jacobian(Csym, q);
 
 Cdot_sym = Jsym * qdot;
@@ -110,7 +113,6 @@ Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
 %% Time Integration
 
-
 Fext = [-10 0 10 10 20 0]';
 dt = 0.1;
 time = 5;
@@ -128,8 +130,8 @@ Afunc = matlabFunction(Asym, 'Vars', {pa, pb, q});
 % p2_a = d;
 % p1_b = 0;
 % p2_b = -d;
-pa = [0 -d 0 d 0 -d 0 d]';
-pb = [0 -d 0 d 0 -d 0 d]';
+pa = [0 d];
+pb = [0 -d];
 
 %% Run 
 q = q0; % initial position of the system
