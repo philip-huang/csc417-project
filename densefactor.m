@@ -6,11 +6,6 @@ function [H, H_tree, forwards] = densefactor(bodies,constraints, allnodes, dofb,
 % dofc: dof of the constraint
 % return H
 
-% n: dim of constraints
-% m: dim of mass
-n = numel(bodies);
-m = numel(constraints);
-
 [forwards, backwards] = dfs(allnodes(1), allnodes, [], []);
 
 % dim of block
@@ -59,7 +54,7 @@ for i=1:numel(forwards)
     for k=i-1:-1:1
         H{i, i} = H{i, i} - H{k, i}'*H{k, k}*H{k, i};
     end
-    for j=i+1:n
+    for j=i+1:numel(forwards)
         for k=i-1:-1:1
             H{i, j} = H{i, j} - H{k, i}'*H{k, k}*H{k, j};
         end
@@ -68,13 +63,19 @@ for i=1:numel(forwards)
 end
 %cell2mat(H)  
 
+% debug
+% Hf = cell2mat(H);
+% D = diag(diag(Hf));
+% Lt = triu(Hf, 1) + eye(size(Hf));
+% L = tril(Hf, -1) + eye(size(Hf));
+% Lt' * D * Lt - cell2mat(H_tree);
 end
 
-function [forwards, backwards] = dfs(n, allnodes, forwards, backwards)
-    children = n.children;
+function [forwards, backwards] = dfs(node, allnodes, forwards, backwards)
+    children = node.children;
     for c=1:numel(children)
         [forwards, backwards] = dfs(allnodes(children(c)), allnodes, forwards, backwards);
     end
-    forwards = [forwards, n.i];
-    backwards = [n.i backwards];
+    forwards = [forwards, node.i];
+    backwards = [node.i backwards];
 end

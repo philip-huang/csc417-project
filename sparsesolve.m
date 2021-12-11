@@ -10,16 +10,17 @@ end
 
 % solve
 for i=1:n
-    node = allnodes(i);
+    node = allnodes(forwards(i));
     for jind = 1:numel(node.children)
-        j = node.children(jind);
-        xx{i} = xx{i} - H{i, j} *xx{j};
+        j = find(forwards==node.children(jind));
+        xx{i} = xx{i} - H{j, i}' *xx{j};
     end
 end
 for i=n:-1:1
+    node = allnodes(forwards(i));
     xx{i} = inv(H{i, i}) * xx{i};
     if i ~= n
-        p = allnodes(i).parent;
+        p = find(forwards==node.parent);
         xx{i} = xx{i} - H{i, p} * xx{p};
     end
 end
