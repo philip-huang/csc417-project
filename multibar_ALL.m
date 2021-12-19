@@ -17,21 +17,22 @@ kd = 10;
 
 % multi-bar case
 % (size of relth) + 1 s number of bars
-root = [-pi/2,d,0]';
-relth =  zeros(5,1); % initial position of the system (6x1)
+root = [-pi/2,0,0]';
+relth =  zeros(3,1); % initial position of the system (6x1)
 
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
 
 % Apply a tip force
 Fext = zeros(numBod*3,1);
-Fext(end-2:end) = [0 0 100]';
+Fext(end-2:end) = [0 0 50]';
+%Fext = [-10 0 10 10 20 0]';
 
 dt = 0.1; % timestep size [s]
 time = 10; % total simulation time [s]
 
-solverType = 2; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+solverType = 1; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
 
 %% Get the Jacobian
 
@@ -78,9 +79,9 @@ Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
 % constrain the COM of the first joint
 aend = R2(q(1)) * [pa(1); -pa(2)] + q(2:3);
-a = [0; 0];
+a = root(2:3) + R2(root(1))*[0; -d];
 
-Ca = aend - R2(q(1))*a;
+Ca = aend - a;
 Ja = jacobian(Ca, q);
 
 Ca_dot = Ja * qdot;
@@ -176,31 +177,46 @@ for i=1:size(tall, 2)
     J = Jfuncmod(pa, pb, q);
     c = cfuncmod(pa, pb, q, qdot);
     b = -(J*inv(M)*extF(:, i) + c);
-
-    if(solverType == 1)
-        % (1) solve lambda for primary constraint
-        % (1a) A\b NAIEVE SOLVE
+    
+    % (1) solve lambda for primary constraint
+    if(solverType == 1) % (1a) A\b NAIEVE SOLVE
         A = Afunc(pa, pb, q);
         lambda = A\b; %inv(A)*b;
-    elseif(solverType == 2)
+    elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
-        % (1b) SPARSE SOLVE
-        [H, forwards] = sparsefactor(allnodes);
-        ylamb = sparsesolve(H, z, allnodes, forwards);
-        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
-    elseif(solverType == 3)
+
+        if(auxConstraint == 1)
+            [H, forwards] = sparsefactor(allnodes);
+            ylamb = sparsesolve(H, z, allnodes, forwards);
+            lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+        elseif(auxConstraint == 2)
+            allnodes(end).D = J;
+            [H, forwards] = sparsefactor(allnodes);
+            z{end} = -b;
+            ylamb = sparsesolve(H, z, allnodes, forwards);
+            lambda = cell2mat(ylamb(size(J, 1)+1:end));
+        end
+    elseif(solverType == 3) % (1c) DENSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
-        % (1c) DENSE SOLVE
-        [H, H_tree, forwards] = densefactor(allnodes);
-        ylamb = densesolve(H, z, forwards);
-        xdense = cell2mat(ylamb);
-        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+        
+        if(auxConstraint == 1)
+            [H, H_tree, forwards] = densefactor(allnodes);
+            ylamb = densesolve(H, z, forwards);
+            xdense = cell2mat(ylamb);
+            lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+        elseif(auxConstraint == 2)
+            allnodes(end).D = J;
+            [H, forwards] = densefactor(allnodes);
+            z{end} = -b;
+            ylamb = densesolve(H, z, allnodes, forwards);
+            lambda = cell2mat(ylamb(size(J, 1)+1:end));
+        end
     end 
     
     if(auxConstraint == 1)
@@ -212,24 +228,45 @@ for i=1:size(tall, 2)
         Ja = Jafunc(pa, pb, q, qdot);
         K = Ja';
         ca = ca_symfunc(pa, pb, q, qdot);
-    
-        % (3) solve for M_hat * K
         MhatK = zeros(size(K));
-        for k=1:size(K, 2)
-            b = -J * inv(M) * K(:, k);
-            lambda = A\b;
-            MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
-        end
-    
-        % (4) solve for mu (O (K^3))
-        mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
-    
-        % (5) solve for primary response to Fext + K*mu
-        b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
-        lambda = A\b;
+
+        if(solverType == 1)
+            % (3) solve for M_hat * K
+            for k=1:size(K, 2)
+                b = -J * inv(M) * K(:, k);
+                lambda = A\b;
+                MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
+            end
         
-        % aux constraints
-        qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
+            % (4) solve for mu (O (K^3))
+            mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
+        
+            % (5) solve for primary response to Fext + K*mu
+            b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
+            lambda = A\b;
+            
+            % aux constraints
+            qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
+        else
+            % (3) solve for M_hat * K
+            MhatK = zeros(size(K));
+            for k=1:size(K, 2)
+                b = -J * inv(M) * K(:, k);
+                z{3} = -b;
+                ylamb = sparsesolve(H, z, allnodes, forwards);
+                lambda = cell2mat(ylamb(size(J, 1)+1:end));
+                MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
+            end
+        
+            % (4) solve for mu (O (K^3))
+            mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
+            
+            % (5) solve for primary response to Fext + K*mu
+            b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
+            z{3} = -b;
+            ylamb = sparsesolve(H, z, allnodes, forwards);
+            lambda = cell2mat(ylamb(size(J, 1)+1:end));
+        end
     end
 
     allConstrF(:,i) = J'*lambda;
