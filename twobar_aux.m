@@ -162,6 +162,7 @@ for i=1:size(tall, 2)
     z{3} = -b;
     ylamb = sparsesolve(H, z, allnodes, forwards);
     lambda = cell2mat(ylamb(size(J, 1)+1:end));
+    
     qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
 
     allConstrF(:,i) = J'*lambda;
