@@ -188,22 +188,3 @@ plot(allConstrF(4, :), 'b')
 plot(extF(1, :), 'm')
 plot(extF(4, :), '--g')
 legend('A constraint', 'B constraint', 'A external', 'B external')
-
-
-function [body] = make_test_body(i, M, p, c)
-    body.i = i;
-    body.dim = size(M, 1);
-    body.isConstraint = 0;
-    body.D = M;
-    body.parent = p;
-    body.children = c;
-end
-
-function [constraint] = make_constraint(i, J, p, c)
-    constraint.i = i;
-    constraint.dim = size(J, 1);
-    constraint.isConstraint = 1;
-    constraint.D = J;
-    constraint.parent = p;
-    constraint.children = c;
-end

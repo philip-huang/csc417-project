@@ -88,6 +88,7 @@ c_sym = jacobian(Cdot_sym, q) * qdot + ks * Csym + kd * Cdot_sym;
 cfuncmod = matlabFunction(c_sym, 'Vars', {pa, pb, q, qdot});
 Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
+
 %% Time Integration
 %Fext = zeros(numBod*3,1); % apply zero external force
 
@@ -126,6 +127,32 @@ for i = 0:(numBod-1)*2-1
         pb(i*2+1:i*2+2) = [0; d];
     end 
 end 
+
+% make bodies
+bodies = [];
+constraints = [];
+parent = -1;
+z = {};
+for i = 0:numBod-1
+    Mi = M(i*3+1:i*3+3, i*3+1:i*3+3);
+    if i == numBod -1
+        children = [];
+        b = make_test_body(i+1, Mi, parent, children);
+    else
+        children = [numBod + i + 1];
+        c = make_constraint(numBod + i + 1, zeros(2, 3), i+1, i+2);
+        constraints = [constraints c];
+        b = make_test_body(i+1, Mi, parent, children);
+        parent = children(1);
+    end
+    bodies = [bodies b];
+    z = [z; zeros(3, 1)];
+end
+
+allnodes = [bodies constraints];
+for i=1:size(constraints, 2)-1
+    z = [z; zeros(2, 1)];
+end
 %% Run 
 q = q0; % initial position of the system
 qdot = zeros(numBod*3,1); % initial velocity of the system
@@ -155,8 +182,15 @@ for i=1:size(tall, 2)
     c = cfuncmod(pa, pb, q, qdot);
 
     b = -(J*inv(M)*extF(:, i) + c);
-    A = Afunc(pa, pb, q);
-    lambda = A\b; %inv(A)*b;
+    
+    for bi=0:size(constraints, 2)-1
+        allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
+        z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+    end
+    [H, forwards] = sparsefactor(allnodes);
+    ylamb = sparsesolve(H, z, allnodes, forwards);
+    lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+    
     qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
     allConstrF(:,i) = J'*lambda;
 

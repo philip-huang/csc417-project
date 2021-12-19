@@ -30,7 +30,7 @@ for i=1:numel(forwards)
     end
 end
 
-    for i = 1:numel(forwards)
+for i = 1:numel(forwards)
     node = allnodes(forwards(i));
     for kind = 1:numel(node.children)
         k = find(forwards==node.children(kind));
