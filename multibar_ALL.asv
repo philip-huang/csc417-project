@@ -13,36 +13,26 @@ m = 1; % mass of the objects
 ks = 100;%spring and damping constants
 kd = 10;
 
-% Define translation frame of each rigid body
-xL = [1;0];
-yL = [0;1];
-x = [xL yL];
-
-%% Visualize Test (opened 4-bar linkage, to extend to with aux constrs)
-% (th_1, x_1, y_1, th_0, x_0, y_0, ..., th_n, x_n, y_n) th [degrees]
-% n = number of elements in the system
-% x,y position of COM of each body
-
-% root = [pi/2,0,0]';
-% relth =  [-pi/2 -pi/2 0]; % initial position of the system (6x1)
-% q0 = generateInitCoords(root, relth, d);
-% figure(3)
-% hold on
-% xlim([-15 15])
-% ylim([-5 20])
-% grid on
-% [allCOM, allBars, allax] = getAllBars(q0,w,h,j,d,m);
-% visualizeAllBars(allCOM, allBars, allax);
-
-%% Get the Jacobian
-% system definition!
+%% system definition! Change all parameters here.
 
 % multi-bar case
 % (size of relth) + 1 s number of bars
 root = [-pi/2,0,0]';
 relth =  zeros(5,1); % initial position of the system (6x1)
+
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
+
+% Apply a tip force
+Fext = zeros(numBod*3,1);
+Fext(end-2:end) = [0 0 100]';
+
+dt = 0.1; % timestep size [s]
+time = 10; % total simulation time [s]
+
+solver = 1; % 1: A\b
+
+%% Get the Jacobian
 
 % joint coordinates in the body frame, one constraint between each joint
 % NOTE: Add more joint coordinates as you add more constraints!
@@ -85,7 +75,7 @@ Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
 %% Jacobian of aux constraint
 
-% constrain the first joint
+% constrain the COM of the first joint
 aend = R2(q(1)) * [pa(1); -pa(2)] + q(2:3);
 a = [0; -d];
 
@@ -100,19 +90,7 @@ Jafunc = matlabFunction(Ja, 'Vars', {pa, pb, q, qdot});
 ca_symfunc = matlabFunction(ca_sym, 'Vars', {pa, pb, q, qdot});
 
 %% Time Integration
-%Fext = zeros(numBod*3,1); % apply zero external force
 
-% Apply a tip force
-Fext = zeros(numBod*3,1);
-Fext(end-2:end) = [0 0 100]';
-
-% % two-bar test force
-% Fext = [-10 0 10 10 20 0]';
-
-% Fext = 10*ones(numBod*3,1); % apply forces on all the joints
-
-dt = 0.1;
-time = 10;
 tall = 1:dt:time;
 stps = time/dt;
 

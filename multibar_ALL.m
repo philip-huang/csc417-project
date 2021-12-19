@@ -13,36 +13,27 @@ m = 1; % mass of the objects
 ks = 100;%spring and damping constants
 kd = 10;
 
-% Define translation frame of each rigid body
-xL = [1;0];
-yL = [0;1];
-x = [xL yL];
-
-%% Visualize Test (opened 4-bar linkage, to extend to with aux constrs)
-% (th_1, x_1, y_1, th_0, x_0, y_0, ..., th_n, x_n, y_n) th [degrees]
-% n = number of elements in the system
-% x,y position of COM of each body
-
-% root = [pi/2,0,0]';
-% relth =  [-pi/2 -pi/2 0]; % initial position of the system (6x1)
-% q0 = generateInitCoords(root, relth, d);
-% figure(3)
-% hold on
-% xlim([-15 15])
-% ylim([-5 20])
-% grid on
-% [allCOM, allBars, allax] = getAllBars(q0,w,h,j,d,m);
-% visualizeAllBars(allCOM, allBars, allax);
-
-%% Get the Jacobian
-% system definition!
+%% system definition! Change all parameters here.
 
 % multi-bar case
 % (size of relth) + 1 s number of bars
-root = [-pi/2,0,0]';
+root = [-pi/2,d,0]';
 relth =  zeros(5,1); % initial position of the system (6x1)
+
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
+
+% Apply a tip force
+Fext = zeros(numBod*3,1);
+Fext(end-2:end) = [0 0 100]';
+
+dt = 0.1; % timestep size [s]
+time = 10; % total simulation time [s]
+
+solverType = 2; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+
+%% Get the Jacobian
 
 % joint coordinates in the body frame, one constraint between each joint
 % NOTE: Add more joint coordinates as you add more constraints!
@@ -85,9 +76,9 @@ Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
 %% Jacobian of aux constraint
 
-% constrain the first joint
+% constrain the COM of the first joint
 aend = R2(q(1)) * [pa(1); -pa(2)] + q(2:3);
-a = [0; -d];
+a = [0; 0];
 
 Ca = aend - R2(q(1))*a;
 Ja = jacobian(Ca, q);
@@ -100,19 +91,7 @@ Jafunc = matlabFunction(Ja, 'Vars', {pa, pb, q, qdot});
 ca_symfunc = matlabFunction(ca_sym, 'Vars', {pa, pb, q, qdot});
 
 %% Time Integration
-%Fext = zeros(numBod*3,1); % apply zero external force
 
-% Apply a tip force
-Fext = zeros(numBod*3,1);
-Fext(end-2:end) = [0 0 100]';
-
-% % two-bar test force
-% Fext = [-10 0 10 10 20 0]';
-
-% Fext = 10*ones(numBod*3,1); % apply forces on all the joints
-
-dt = 0.1;
-time = 10;
 tall = 1:dt:time;
 stps = time/dt;
 
@@ -197,54 +176,61 @@ for i=1:size(tall, 2)
     J = Jfuncmod(pa, pb, q);
     c = cfuncmod(pa, pb, q, qdot);
     b = -(J*inv(M)*extF(:, i) + c);
+
+    if(solverType == 1)
+        % (1) solve lambda for primary constraint
+        % (1a) A\b NAIEVE SOLVE
+        A = Afunc(pa, pb, q);
+        lambda = A\b; %inv(A)*b;
+    elseif(solverType == 2)
+        for bi=0:size(constraints, 2)-1
+            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
+            z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+        end
+        % (1b) SPARSE SOLVE
+        [H, forwards] = sparsefactor(allnodes);
+        ylamb = sparsesolve(H, z, allnodes, forwards);
+        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+    elseif(solverType == 3)
+        for bi=0:size(constraints, 2)-1
+            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
+            z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+        end
+        % (1c) DENSE SOLVE
+        [H, H_tree, forwards] = densefactor(allnodes);
+        ylamb = densesolve(H, z, forwards);
+        xdense = cell2mat(ylamb);
+        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+    end 
     
-%     for bi=0:size(constraints, 2)-1
-%         allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
-%         z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
-%     end
-
-    % (1) solve lambda for primary constraint
-    % (1a) A\b NAIEVE SOLVE
-    A = Afunc(pa, pb, q);
-    lambda = A\b; %inv(A)*b;
-
-    % (1b) SPARSE SOLVE
-%     [H, forwards] = sparsefactor(allnodes);
-%     ylamb = sparsesolve(H, z, allnodes, forwards);
-%     lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
-
-    % (1c) DENSE SOLVE
-%     [H, H_tree, forwards] = densefactor(allnodes);
-%     ylamb = densesolve(H, z, forwards);
-%     xdense = cell2mat(ylamb);
-%     lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+    if(auxConstraint == 1)
+        % no aux constraints
+        qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
+    elseif(auxConstraint == 2)
+        % (2) evaluate Ja K ca
+        vdot_aux = inv(M) * (J'*lambda + extF(:, i));
+        Ja = Jafunc(pa, pb, q, qdot);
+        K = Ja';
+        ca = ca_symfunc(pa, pb, q, qdot);
     
-    % (2) evaluate Ja K ca
-    vdot_aux = inv(M) * (J'*lambda + extF(:, i));
-    Ja = Jafunc(pa, pb, q, qdot);
-    K = Ja';
-    ca = ca_symfunc(pa, pb, q, qdot);
-
-    % (3) solve for M_hat * K
-    MhatK = zeros(size(K));
-    for k=1:size(K, 2)
-        b = -J * inv(M) * K(:, k);
+        % (3) solve for M_hat * K
+        MhatK = zeros(size(K));
+        for k=1:size(K, 2)
+            b = -J * inv(M) * K(:, k);
+            lambda = A\b;
+            MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
+        end
+    
+        % (4) solve for mu (O (K^3))
+        mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
+    
+        % (5) solve for primary response to Fext + K*mu
+        b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
         lambda = A\b;
-        MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
+        
+        % aux constraints
+        qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
     end
-
-    % (4) solve for mu (O (K^3))
-    mu = (Ja*MhatK) \ (a - Ja*vdot_aux - ca);
-
-    % (5) solve for primary response to Fext + K*mu
-    b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
-    lambda = A\b;
-    
-    % no aux constraints
-    %qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
-    
-    % aux constraints
-    qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
 
     allConstrF(:,i) = J'*lambda;
 
