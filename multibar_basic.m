@@ -187,8 +187,16 @@ for i=1:size(tall, 2)
         allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
         z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
     end
-    [H, forwards] = sparsefactor(allnodes);
-    ylamb = sparsesolve(H, z, allnodes, forwards);
+
+    % SPARSE SOLVE
+    %[H, forwards] = sparsefactor(allnodes);
+    %ylamb = sparsesolve(H, z, allnodes, forwards);
+
+    % DENSE SOLVE
+    [H, H_tree, forwards] = densefactor(allnodes);
+    ylamb = densesolve(H, z, forwards);
+    xdense = cell2mat(ylamb);
+
     lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     
     qddot = inv(M)*J'*lambda + inv(M)*extF(:, i); % (6x1) update the velocity
