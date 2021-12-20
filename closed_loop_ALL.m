@@ -173,7 +173,7 @@ if visualize == 1
     grid on
 end
 
-tStart = tic;
+Tsolve = zeros(size(tall, 2),1);
 for i=1:size(tall, 2)
     t = tall(i);
 
@@ -191,7 +191,7 @@ for i=1:size(tall, 2)
         tic
         A = Afunc(pa, pb, q);
         lambda = A\b; %inv(A)*b;
-        toc
+        Tsolve(i) = toc;
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
@@ -200,7 +200,7 @@ for i=1:size(tall, 2)
         tic
         [H, forwards] = sparsefactor(allnodes);
         ylamb = sparsesolve(H, z, allnodes, forwards);
-        toc
+        Tsolve(i) = toc;
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
@@ -212,7 +212,7 @@ for i=1:size(tall, 2)
         tic
         [H, H_tree, forwards] = densefactor(allnodes);
         ylamb = densesolve(H, z, forwards);
-        toc
+        Tsolve(i) = toc;
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     end 
     
@@ -270,7 +270,7 @@ for i=1:size(tall, 2)
             for bi=0:size(constraints, 2)-1
                 z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
             end
-
+            
             ylamb = sparsesolve(H, z, allnodes, forwards);
             lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
         end
@@ -289,8 +289,9 @@ for i=1:size(tall, 2)
         cla
     end
 end
-elapsed = toc(tStart);
-elapsed = elapsed / size(tall, 2)
+
+time = sum(Tsolve)/size(tall, 2)
+
 if visualize == 1
     close(vid);
 end

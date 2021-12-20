@@ -15,27 +15,25 @@ kd = 10;
 
 %% System definition! Change all parameters here.
 
-hTree = 3; % height of the binary tree
-% 2^0 + 2^1 + ... + 2^h = 2^(h+1)-1
-totBod = 2^(hTree+1)-1;
+% multi-bar case
+% (size of relth) + 1 s number of bars
+root = [0,0,0]';
+numBars = 2;
+relth =  zeros(numBars-1,1); % initial position of the system (6x1)
 
-root = [-pi/2,0,0]';
-relth =  zeros(totBod-1,1); % initial position of the system (6x1)
-%th = pi/4;
-q0 = zeros(totBod*3,1);%generateInitCoords(root, relth, d);
-%q0 = generateInitTreeCoords(root, th, d, hTree);
-numBod = totBod; length(q0)/3;
+q0 = generateInitCoords(root, relth, d);
+numBod = length(q0)/3;
 
 % Apply a tip force
 Fext = zeros(numBod*3,1);
-Fext(end-2:end) = [0 -25 50]';
+Fext(end-2:end) = [40 50 20]';
 
-dt = 0.025; % timestep size [s]
+dt = 0.1; % timestep size [s]
 time = 5; % total simulation time [s]
 
-solverType = 3; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
-visualize = 1; % 1=visualize, otherwise=no
+solverType = 1; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+visualize = 0; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
@@ -52,26 +50,11 @@ R2 = @(theta) [cos(theta) -sin(theta);
     sin(theta) cos(theta)];
 
 % transform the joint coordinates in the body frame to the world frame
-
 xa = [];
 xb = [];
-
-for i = 0:hTree -1 % for every level of the tree
-    for k = 1:2^i % for every block node
-        ind = (k-1)*2;
-        par = 2^i+k-1; % parent
-
-        ln = 2^(i+1)+ind;
-        rn = 2^(i+1)+ind+1;
-
-        % left branch            
-        xa = cat(1,xa,R2(q(par,1))*pa(par,:)' + q(par,2:3)');
-        xb = cat(1,xb,R2(q(ln,1))*pb(ln,:)' + q(ln,2:3)');
-
-        % right branch
-        xa = cat(1,xa,R2(q(par,1))*pa(par,:)' + q(par,2:3)');
-        xb = cat(1,xb,R2(q(rn,1))*pb(1,:)' + q(rn,2:3)');
-    end
+for c = 1:(numBod-1) % for every constraint, body i-1 and body i
+    xa = cat(1,xa,R2(q(c,1))*pa(1,:)' + q(c,2:3)');
+    xb = cat(1,xb,R2(q(c+1,1))*pb(1,:)' + q(c+1,2:3)');
 end
 
 % C(q) = 0
@@ -139,47 +122,26 @@ for i = 0:(numBod-1)*2-1
         pb(i*2+1:i*2+2) = [0; d];
     end 
 end 
-%%
+
 % make bodies
 bodies = [];
 constraints = [];
-currparent = -1;
+parent = -1;
 z = {};
-
-% for tree structures
-
-for i = 0:hTree % for every level of the tree
+for i = 0:numBod-1
     Mi = M(i*3+1:i*3+3, i*3+1:i*3+3);
-    
-    if i==hTree % we are all the leaf of the tree
+    if i == numBod -1
         children = [];
-        for k = 1:2^(i)
-            ind = 2^i+k-1;
-            b = make_test_body(ind, Mi, numBod + ind -1, children);
-            bodies = [bodies b];
-            z = [z; zeros(3, 1)];
-        end 
-
-    else % another level of the tree
-        
-        for k = 1:2^i % for every block node
-            ind = 2^i+k-1;
-            children = [totBod + ind*2-1, totBod + ind*2];% there are two child constraints
-
-            cl = make_constraint(totBod + ind*2-1, zeros(2, 3), ind, ind*2);
-            cr = make_constraint(totBod + ind*2, zeros(2, 3), ind, ind*2+1);
-
-            constraints = [constraints cl cr];
-           
-            currparent = numBod+ind-1;
-            if(i==0)
-                currparent = - 1;
-            end
-            b = make_test_body(ind, Mi, currparent, children);
-            bodies = [bodies b];
-            z = [z; zeros(3, 1)];
-        end 
-    end 
+        b = make_test_body(i+1, Mi, parent, children);
+    else
+        children = [numBod + i + 1];
+        c = make_constraint(numBod + i + 1, zeros(2, 3), i+1, i+2);
+        constraints = [constraints c];
+        b = make_test_body(i+1, Mi, parent, children);
+        parent = children(1);
+    end
+    bodies = [bodies b];
+    z = [z; zeros(3, 1)];
 end
 
 allnodes = [bodies constraints];
@@ -202,23 +164,21 @@ if visualize == 1
     open(vid);
     figure(1)
     hold on
-    xlim([-15 15])
-    ylim([-15 15])
+    xlim([-5 30])
+    ylim([-5 20])
     grid on
 end
 
+
+tStart = tic;
 Tsolve = zeros(size(tall, 2),1);
 for i=1:size(tall, 2)
-
-    i
-
     t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
     if visualize == 1
         visualizeAllBars(allCOM, allBars, allax);
     end
-
     % Get J, c, b for primary constraint
     J = Jfuncmod(pa, pb, q);
     c = cfuncmod(pa, pb, q, qdot);
@@ -228,15 +188,11 @@ for i=1:size(tall, 2)
     if(solverType == 1) % (1a) A\b NAIEVE SOLVE
         tic
         A = Afunc(pa, pb, q);
-        lambda = inv(A)*b;%A\b; %
+        lambda = A\b; %inv(A)*b;
         Tsolve(i) = toc;
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
-            par = floor(bi/2);
-            child = bi+1;
-            Jic = J(bi*2+1:bi*2+2, par*3+1:par*3+3);
-            Jip = J(bi*2+1:bi*2+2, child*3+1:child*3+3);
-            allnodes(numBod+bi+1).D = [Jic Jip];
+            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         tic
@@ -247,11 +203,7 @@ for i=1:size(tall, 2)
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
         for bi=0:size(constraints, 2)-1
-            par = floor(bi/2);
-            child = bi+1;
-            Jic = J(bi*2+1:bi*2+2, par*3+1:par*3+3);
-            Jip = J(bi*2+1:bi*2+2, child*3+1:child*3+3);
-            allnodes(numBod+bi+1).D = [Jic Jip];
+            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         
@@ -289,19 +241,20 @@ for i=1:size(tall, 2)
             b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
             lambda = A\b;
             
-            % aux constraints
-            qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
         else % Sparse or Dense Solve
             % (3) solve for M_hat * K
             MhatK = zeros(size(K));
             for k=1:size(K, 2)
                 b = -J * inv(M) * K(:, k);
-        
                 for bi=0:size(constraints, 2)-1
                     z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
                 end
 
-                ylamb = sparsesolve(H, z, allnodes, forwards);
+                if(solverType == 2)
+                    ylamb = sparsesolve(H, z, allnodes, forwards);
+                else
+                    ylamb = densesolve(H, z, forwards);
+                end
                 lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
                 MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
             end
@@ -333,9 +286,9 @@ for i=1:size(tall, 2)
         cla
     end
 end
-
-time = sum(Tsolve)/size(tall, 2)
-
+time = sum(Tsolve)
+elapsed = toc(tStart)
+%elapsed = elapsed / size(tall, 2)
 if visualize == 1
     close(vid);
 end

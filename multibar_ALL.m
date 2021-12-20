@@ -18,7 +18,8 @@ kd = 10;
 % multi-bar case
 % (size of relth) + 1 s number of bars
 root = [0,0,0]';
-relth =  zeros(4,1); % initial position of the system (6x1)
+numBars = 10;
+relth =  zeros(numBars-1,1); % initial position of the system (6x1)
 
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
@@ -28,11 +29,11 @@ Fext = zeros(numBod*3,1);
 Fext(end-2:end) = [40 50 20]';
 
 dt = 0.1; % timestep size [s]
-time = 10; % total simulation time [s]
+time = 5; % total simulation time [s]
 
-solverType = 2; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
-visualize = 1; % 1=visualize, otherwise=no
+solverType = 3; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+visualize = 0; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
@@ -168,8 +169,7 @@ if visualize == 1
     grid on
 end
 
-
-tStart = tic;
+Tsolve = zeros(size(tall, 2),1);
 for i=1:size(tall, 2)
     t = tall(i);
 
@@ -186,8 +186,8 @@ for i=1:size(tall, 2)
     if(solverType == 1) % (1a) A\b NAIEVE SOLVE
         tic
         A = Afunc(pa, pb, q);
-        lambda = A\b; %inv(A)*b;
-        toc
+        lambda = inv(A)*b;%A\b; %
+        Tsolve(i) = toc;
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
@@ -196,7 +196,7 @@ for i=1:size(tall, 2)
         tic
         [H, forwards] = sparsefactor(allnodes);
         ylamb = sparsesolve(H, z, allnodes, forwards);
-        toc
+        Tsolve(i) = toc;
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
@@ -208,7 +208,7 @@ for i=1:size(tall, 2)
         tic
         [H, H_tree, forwards] = densefactor(allnodes);
         ylamb = densesolve(H, z, forwards);
-        toc
+        Tsolve(i) = toc;
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     end 
     
@@ -284,8 +284,9 @@ for i=1:size(tall, 2)
         cla
     end
 end
-elapsed = toc(tStart);
-elapsed = elapsed / size(tall, 2)
+
+time = sum(Tsolve)/size(tall, 2)
+
 if visualize == 1
     close(vid);
 end
