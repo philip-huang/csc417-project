@@ -13,23 +13,25 @@ m = 1; % mass of the objects
 ks = 100;%spring and damping constants
 kd = 10;
 
-%% system definition! Change all parameters here.
+%% System definition! Change all parameters here.
 
-% multi-bar case
-% (size of relth) + 1 s number of bars
+hTree = 3; % height of the binary tree
+% 2^0 + 2^1 + ... + 2^h = 2^(h+1)-1
+totBod = 2^(hTree+1)-1;
+
 root = [-pi/2,0,0]';
-relth =  zeros(6,1); % initial position of the system (6x1)
-
-q0 = generateInitCoords(root, relth, d);
-numBod = length(q0)/3;
+relth =  zeros(totBod-1,1); % initial position of the system (6x1)
+%th = pi/4;
+q0 = zeros(totBod*3,1);%generateInitCoords(root, relth, d);
+%q0 = generateInitTreeCoords(root, th, d, hTree);
+numBod = totBod; length(q0)/3;
 
 % Apply a tip force
 Fext = zeros(numBod*3,1);
-Fext(end-2:end) = [0  50]';
-%Fext = [-10 0 10 10 20 0]';
+%Fext(end-2:end) = [0 -25 50]';
 
-dt = 0.1; % timestep size [s]
-time = 10; % total simulation time [s]
+dt = 0.025; % timestep size [s]
+time = 5; % total simulation time [s]
 
 solverType = 1; % 1: A\b, 2: sparse, 3: dense
 auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
@@ -49,11 +51,26 @@ R2 = @(theta) [cos(theta) -sin(theta);
     sin(theta) cos(theta)];
 
 % transform the joint coordinates in the body frame to the world frame
+
 xa = [];
 xb = [];
-for c = 1:(numBod-1) % for every constraint, body i-1 and body i
-    xa = cat(1,xa,R2(q(c,1))*pa(1,:)' + q(c,2:3)');
-    xb = cat(1,xb,R2(q(c+1,1))*pb(1,:)' + q(c+1,2:3)');
+
+for i = 0:hTree -1 % for every level of the tree
+    for k = 1:2^i % for every block node
+        ind = (k-1)*2;
+        par = 2^i+k-1; % parent
+
+        ln = 2^(i+1)+ind;
+        rn = 2^(i+1)+ind+1;
+
+        % left branch            
+        xa = cat(1,xa,R2(q(par,1))*pa(par,:)' + q(par,2:3)');
+        xb = cat(1,xb,R2(q(ln,1))*pb(ln,:)' + q(ln,2:3)');
+
+        % right branch
+        xa = cat(1,xa,R2(q(par,1))*pa(par,:)' + q(par,2:3)');
+        xb = cat(1,xb,R2(q(rn,1))*pb(1,:)' + q(rn,2:3)');
+    end
 end
 
 % C(q) = 0
@@ -79,7 +96,7 @@ Jfuncmod = matlabFunction(Jsym, 'Vars', {pa, pb, q});
 
 % constrain the COM of the first joint
 aend = R2(q(1)) * [pa(1); -pa(2)] + q(2:3);
-a = root(2:3) + R2(root(1))'*[0; -d];
+a = root(2:3) + R2(root(1))*[0; -d];
 
 Ca = aend - a;
 Ja = jacobian(Ca, q);
@@ -121,32 +138,52 @@ for i = 0:(numBod-1)*2-1
         pb(i*2+1:i*2+2) = [0; d];
     end 
 end 
-
-% make bodies
-bodies = [];
-constraints = [];
-parent = -1;
-z = {};
-for i = 0:numBod-1
-    Mi = M(i*3+1:i*3+3, i*3+1:i*3+3);
-    if i == numBod -1
-        children = [];
-        b = make_test_body(i+1, Mi, parent, children);
-    else
-        children = [numBod + i + 1];
-        c = make_constraint(numBod + i + 1, zeros(2, 3), i+1, i+2);
-        constraints = [constraints c];
-        b = make_test_body(i+1, Mi, parent, children);
-        parent = children(1);
-    end
-    bodies = [bodies b];
-    z = [z; zeros(3, 1)];
-end
-
-allnodes = [bodies constraints];
-for i=1:size(constraints, 2)-1
-    z = [z; zeros(2, 1)];
-end
+%%
+% % make bodies
+% bodies = [];
+% constraints = [];
+% rowparent = -1;
+% currparent = -1;
+% z = {};
+% 
+% % for tree structures
+% 
+% for i = 0:hTree % for every level of the tree
+%     Mi = M(i*3+1:i*3+3, i*3+1:i*3+3);
+%     
+%     if i==hTree % we are all the leaf of the tree
+%         children = [];
+%         for j = 1:2^(i)
+%             b = make_test_body(i+2^(i), Mi, i+2^(i)-1, children);
+%             bodies = [bodies b];
+%         end 
+% 
+%     else % another level of the tree
+%         
+%         for j = 1:2^i % for every block node
+%             ind = (j-1)*2;
+%             children = [totBod + 2^(i+1) - 1 + ind, totBod + 2^(i+1) + ind];% there are two child constraints
+% 
+%             cl = make_constraint(totBod + 2^(i+1) - 1 + ind, zeros(2, 3), 2^i+j-1, 2^(i+1)+ind);
+%             cr = make_constraint(totBod + 2^(i+1) + ind, zeros(2, 3), 2^i+j-1, 2^(i+1)+ind+1);
+% 
+%             constraints = [constraints cl cr];
+%            
+%             if(rowparent ~= -1)
+%                 currparent = rowparent + j - 1;
+%             end
+%             b = make_test_body(2^i+j-1, Mi, currparent, children);
+%             bodies = [bodies b];
+%             z = [z; zeros(3, 1)];
+%         end 
+%         rowparent = totBod + 2^(i+1)-1;
+%     end 
+% end
+% 
+% allnodes = [bodies constraints];
+% for i=1:size(constraints, 2)-1
+%     z = [z; zeros(2, 1)];
+% end
 %% Run 
 q = q0; % initial position of the system
 qdot = zeros(numBod*3,1); % initial velocity of the system
@@ -163,12 +200,14 @@ open(vid);
 
 figure(1)
 hold on
-xlim([-5 30])
-ylim([-5 20])
+xlim([-15 15])
+ylim([-15 15])
 grid on
 for i=1:size(tall, 2)
-    t = tall(i);
+
+    i
     
+    t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
     visualizeAllBars(allCOM, allBars, allax);
@@ -188,35 +227,20 @@ for i=1:size(tall, 2)
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
 
-        if(auxConstraint == 1)
-            [H, forwards] = sparsefactor(allnodes);
-            ylamb = sparsesolve(H, z, allnodes, forwards);
-            lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
-        elseif(auxConstraint == 2)
-            allnodes(end).D = J;
-            [H, forwards] = sparsefactor(allnodes);
-            z{end} = -b;
-            ylamb = sparsesolve(H, z, allnodes, forwards);
-            lambda = cell2mat(ylamb(size(J, 1)+1:end));
-        end
+        [H, forwards] = sparsefactor(allnodes);
+        ylamb = sparsesolve(H, z, allnodes, forwards);
+        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
+
     elseif(solverType == 3) % (1c) DENSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         
-        if(auxConstraint == 1)
-            [H, H_tree, forwards] = densefactor(allnodes);
-            ylamb = densesolve(H, z, forwards);
-            xdense = cell2mat(ylamb);
-            lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
-        elseif(auxConstraint == 2)
-            allnodes(end).D = J;
-            [H, forwards] = densefactor(allnodes);
-            z{end} = -b;
-            ylamb = densesolve(H, z, allnodes, forwards);
-            lambda = cell2mat(ylamb(size(J, 1)+1:end));
-        end
+        [H, H_tree, forwards] = densefactor(allnodes);
+        ylamb = densesolve(H, z, forwards);
+        xdense = cell2mat(ylamb);
+        lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     end 
     
     if(auxConstraint == 1)
@@ -228,6 +252,7 @@ for i=1:size(tall, 2)
         Ja = Jafunc(pa, pb, q, qdot);
         K = Ja';
         ca = ca_symfunc(pa, pb, q, qdot);
+
         MhatK = zeros(size(K));
 
         if(solverType == 1)
@@ -247,14 +272,18 @@ for i=1:size(tall, 2)
             
             % aux constraints
             qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
-        else
+        else % Sparse or Dense Solve
             % (3) solve for M_hat * K
             MhatK = zeros(size(K));
             for k=1:size(K, 2)
                 b = -J * inv(M) * K(:, k);
-                z{3} = -b;
+        
+                for bi=0:size(constraints, 2)-1
+                    z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+                end
+
                 ylamb = sparsesolve(H, z, allnodes, forwards);
-                lambda = cell2mat(ylamb(size(J, 1)+1:end));
+                lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
                 MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
             end
         
@@ -263,10 +292,16 @@ for i=1:size(tall, 2)
             
             % (5) solve for primary response to Fext + K*mu
             b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
-            z{3} = -b;
+            for bi=0:size(constraints, 2)-1
+                z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+            end
+
             ylamb = sparsesolve(H, z, allnodes, forwards);
-            lambda = cell2mat(ylamb(size(J, 1)+1:end));
+            lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
         end
+
+        % aux constraints
+        qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
     end
 
     allConstrF(:,i) = J'*lambda;

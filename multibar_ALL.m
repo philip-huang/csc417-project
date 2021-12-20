@@ -18,7 +18,7 @@ kd = 10;
 % multi-bar case
 % (size of relth) + 1 s number of bars
 root = [0,0,0]';
-relth =  zeros(2,1); % initial position of the system (6x1)
+relth =  zeros(4,1); % initial position of the system (6x1)
 
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
