@@ -15,7 +15,7 @@ kd = 10;
 
 %% System definition! Change all parameters here.
 
-hTree = 3; % height of the binary tree
+hTree = 10; % height of the binary tree
 % 2^0 + 2^1 + ... + 2^h = 2^(h+1)-1
 totBod = 2^(hTree+1)-1;
 
@@ -31,10 +31,11 @@ Fext = zeros(numBod*3,1);
 %Fext(end-2:end) = [0 -25 50]';
 
 dt = 0.025; % timestep size [s]
-time = 5; % total simulation time [s]
+time = 1; % total simulation time [s]
 
-solverType = 2; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
+solverType = 1; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+visualize = 0; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
@@ -196,20 +197,27 @@ for t=1:1
     extF(:, t) = Fext;
 end
 
-vid = VideoWriter('video.avi');
-open(vid);
+if visualize == 1
+    vid = VideoWriter('video.avi');
+    open(vid);
+    figure(1)
+    hold on
+    xlim([-15 15])
+    ylim([-15 15])
+    grid on
+end
 
-figure(1)
-hold on
-xlim([-15 15])
-ylim([-15 15])
-grid on
+tStart = tic;
 for i=1:size(tall, 2)
+
+    i
 
     t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
-    visualizeAllBars(allCOM, allBars, allax);
+    if visualize == 1
+        visualizeAllBars(allCOM, allBars, allax);
+    end
 
     % Get J, c, b for primary constraint
     J = Jfuncmod(pa, pb, q);
@@ -218,8 +226,10 @@ for i=1:size(tall, 2)
     
     % (1) solve lambda for primary constraint
     if(solverType == 1) % (1a) A\b NAIEVE SOLVE
+        tic
         A = Afunc(pa, pb, q);
         lambda = A\b; %inv(A)*b;
+        toc
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
             par = floor(bi/2);
@@ -229,9 +239,10 @@ for i=1:size(tall, 2)
             allnodes(numBod+bi+1).D = [Jic Jip];
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
-
+        tic
         [H, forwards] = sparsefactor(allnodes);
         ylamb = sparsesolve(H, z, allnodes, forwards);
+        toc
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
@@ -244,8 +255,10 @@ for i=1:size(tall, 2)
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         
+        tic
         [H, H_tree, forwards] = densefactor(allnodes);
         ylamb = densesolve(H, z, forwards);
+        toc
         xdense = cell2mat(ylamb);
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     end 
@@ -315,8 +328,14 @@ for i=1:size(tall, 2)
 
     [q, qdot] = forwardeuler(q, qdot, qddot, dt);
 
-    frame = getframe(gcf);
-    writeVideo(vid,frame);
-    cla
+    if visualize == 1
+        frame = getframe(gcf);
+        writeVideo(vid,frame);
+        cla
+    end
 end
-close(vid);
+elapsed = toc(tStart);
+elapsed = elapsed / size(tall, 2)
+if visualize == 1
+    close(vid);
+end

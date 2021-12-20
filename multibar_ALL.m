@@ -18,7 +18,7 @@ kd = 10;
 % multi-bar case
 % (size of relth) + 1 s number of bars
 root = [0,0,0]';
-relth =  zeros(49,1); % initial position of the system (6x1)
+relth =  zeros(4,1); % initial position of the system (6x1)
 
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
@@ -32,7 +32,7 @@ time = 10; % total simulation time [s]
 
 solverType = 2; % 1: A\b, 2: sparse, 3: dense
 auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
-visualize = 0; % 1=visualize, otherwise=no
+visualize = 1; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
@@ -161,13 +161,13 @@ end
 if visualize == 1
     vid = VideoWriter('video.avi');
     open(vid);
+    figure(1)
+    hold on
+    xlim([-5 30])
+    ylim([-5 20])
+    grid on
 end
 
-figure(1)
-hold on
-xlim([-5 30])
-ylim([-5 20])
-grid on
 
 tStart = tic;
 for i=1:size(tall, 2)
