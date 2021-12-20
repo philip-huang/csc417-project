@@ -30,7 +30,7 @@ Fext(end-2:end) = [40 50 20]';
 dt = 0.1; % timestep size [s]
 time = 10; % total simulation time [s]
 
-solverType = 1; % 1: A\b, 2: sparse, 3: dense
+solverType = 2; % 1: A\b, 2: sparse, 3: dense
 auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
 
 %% Get the Jacobian

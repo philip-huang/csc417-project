@@ -33,7 +33,7 @@ Fext = zeros(numBod*3,1);
 dt = 0.025; % timestep size [s]
 time = 5; % total simulation time [s]
 
-solverType = 1; % 1: A\b, 2: sparse, 3: dense
+solverType = 2; % 1: A\b, 2: sparse, 3: dense
 auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
 
 %% Get the Jacobian
@@ -205,8 +205,6 @@ ylim([-15 15])
 grid on
 for i=1:size(tall, 2)
 
-    i
-    
     t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
@@ -222,9 +220,23 @@ for i=1:size(tall, 2)
         A = Afunc(pa, pb, q);
         lambda = A\b; %inv(A)*b;
     elseif(solverType == 2) % (1b) SPARSE SOLVE
-        for bi=0:size(constraints, 2)-1
-            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
-            z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
+        for ti = 0:hTree-1 % for every level of the tree                
+            for k = 1:2^ti % for every block node
+                ind = (k-1)*2;
+                children = [totBod + 2^(ti+1) - 1 + ind, totBod + 2^(ti+1) + ind]; % there are two child constraints
+                bodyparent = 2^(ti)-1 + k - 1;
+                CL = 2^(ti+1) - 1 + ind;
+                bodychildL = allnodes(CL+numBod).children - 1;
+                CR = 2^(ti+1) + ind;
+                bodychildR = allnodes(CR+numBod).children - 1;
+
+                size([J(CL:CL+1, bodyparent*3+1:bodyparent*3+3) J(CL:CL+1, bodychildL*3+1:bodychildL*3+3)])
+                allnodes(CL+totBod).D = [J(CL:CL+1, bodyparent*3+1:bodyparent*3+3) J(CL:CL+1, bodychildL*3+1:bodychildL*3+3)];
+                z{CL+totBod} = -b(CL:CL+1);
+                
+                allnodes(CR+totBod).D = [J(CR:CR+1, bodyparent*3+1:bodyparent*3+3) J(CR:CR+1, bodychildR*3+1:bodychildR*3+3)];
+                z{CR+totBod} = -b(CR:CR+1);
+            end 
         end
 
         [H, forwards] = sparsefactor(allnodes);
