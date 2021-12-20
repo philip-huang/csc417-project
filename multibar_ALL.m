@@ -18,7 +18,7 @@ kd = 10;
 % multi-bar case
 % (size of relth) + 1 s number of bars
 root = [0,0,0]';
-relth =  zeros(4,1); % initial position of the system (6x1)
+relth =  zeros(49,1); % initial position of the system (6x1)
 
 q0 = generateInitCoords(root, relth, d);
 numBod = length(q0)/3;
@@ -30,8 +30,9 @@ Fext(end-2:end) = [40 50 20]';
 dt = 0.1; % timestep size [s]
 time = 10; % total simulation time [s]
 
-solverType = 1; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
+solverType = 2; % 1: A\b, 2: sparse, 3: dense
+auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
+visualize = 1; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
@@ -157,20 +158,25 @@ for t=1:1
     extF(:, t) = Fext;
 end
 
-vid = VideoWriter('video.avi');
-open(vid);
+if visualize == 1
+    vid = VideoWriter('video.avi');
+    open(vid);
+end
 
 figure(1)
 hold on
 xlim([-5 30])
 ylim([-5 20])
 grid on
+
+tStart = tic;
 for i=1:size(tall, 2)
     t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);
-    visualizeAllBars(allCOM, allBars, allax);
-
+    if visualize == 1
+        visualizeAllBars(allCOM, allBars, allax);
+    end
     % Get J, c, b for primary constraint
     J = Jfuncmod(pa, pb, q);
     c = cfuncmod(pa, pb, q, qdot);
@@ -178,16 +184,19 @@ for i=1:size(tall, 2)
     
     % (1) solve lambda for primary constraint
     if(solverType == 1) % (1a) A\b NAIEVE SOLVE
+        tic
         A = Afunc(pa, pb, q);
         lambda = A\b; %inv(A)*b;
+        toc
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
             allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
-
+        tic
         [H, forwards] = sparsefactor(allnodes);
         ylamb = sparsesolve(H, z, allnodes, forwards);
+        toc
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
@@ -196,9 +205,10 @@ for i=1:size(tall, 2)
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         
+        tic
         [H, H_tree, forwards] = densefactor(allnodes);
         ylamb = densesolve(H, z, forwards);
-        xdense = cell2mat(ylamb);
+        toc
         lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
     end 
     
@@ -229,19 +239,20 @@ for i=1:size(tall, 2)
             b = -(J*inv(M)*(K*mu + extF(:, i)) + c);
             lambda = A\b;
             
-            % aux constraints
-            qddot = inv(M)*(K*mu + J'*lambda + extF(:, i)); % (6x1) update the velocity
         else % Sparse or Dense Solve
             % (3) solve for M_hat * K
             MhatK = zeros(size(K));
             for k=1:size(K, 2)
                 b = -J * inv(M) * K(:, k);
-        
                 for bi=0:size(constraints, 2)-1
                     z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
                 end
 
-                ylamb = sparsesolve(H, z, allnodes, forwards);
+                if(solverType == 2)
+                    ylamb = sparsesolve(H, z, allnodes, forwards);
+                else
+                    ylamb = densesolve(H, z, forwards);
+                end
                 lambda = cell2mat(ylamb(size(bodies, 2)+1:end));
                 MhatK(:, k) = inv(M) * (J' * lambda + K(:, k));
             end
@@ -267,8 +278,14 @@ for i=1:size(tall, 2)
 
     [q, qdot] = forwardeuler(q, qdot, qddot, dt);
 
-    frame = getframe(gcf);
-    writeVideo(vid,frame);
-    cla
+    if visualize == 1
+        frame = getframe(gcf);
+        writeVideo(vid,frame);
+        cla
+    end
 end
-close(vid);
+elapsed = toc(tStart);
+elapsed = elapsed / size(tall, 2)
+if visualize == 1
+    close(vid);
+end

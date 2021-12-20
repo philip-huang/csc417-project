@@ -5,11 +5,12 @@ function [H, forwards] = sparsefactor(allnodes)
 % return H
 
 % allnodes1 should be the root node
+
 [forwards, backwards] = dfs(allnodes(1), allnodes, [], []);
 n = numel(forwards);
 
 % dim of block
-H = {};
+H = cell(numel(forwards), numel(forwards));
 
 for i=1:numel(forwards)
     node = allnodes(forwards(i));
@@ -30,6 +31,7 @@ for i=1:numel(forwards)
     end
 end
 
+
 for i = 1:numel(forwards)
     node = allnodes(forwards(i));
     for kind = 1:numel(node.children)
@@ -38,7 +40,7 @@ for i = 1:numel(forwards)
     end
     if i ~= n
         p = find(forwards==node.parent);
-        H{i, p} = inv(H{i, i}) * H{i, p};
+        H{i, p} = H{i, i} \ H{i, p};
     end
 end
     

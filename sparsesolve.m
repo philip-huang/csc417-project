@@ -18,7 +18,7 @@ for i=1:n
 end
 for i=n:-1:1
     node = allnodes(forwards(i));
-    xx{i} = inv(H{i, i}) * xx{i};
+    xx{i} = H{i, i} \ xx{i};
     if i ~= n
         p = find(forwards==node.parent);
         xx{i} = xx{i} - H{i, p} * xx{p};

@@ -142,7 +142,6 @@ end
 % make bodies
 bodies = [];
 constraints = [];
-rowparent = -1;
 currparent = -1;
 z = {};
 
@@ -154,29 +153,31 @@ for i = 0:hTree % for every level of the tree
     if i==hTree % we are all the leaf of the tree
         children = [];
         for k = 1:2^(i)
-            b = make_test_body(i+2^(i), Mi, i+2^(i)-1, children);
+            ind = 2^i+k-1;
+            b = make_test_body(ind, Mi, numBod + ind -1, children);
             bodies = [bodies b];
+            z = [z; zeros(3, 1)];
         end 
 
     else % another level of the tree
         
         for k = 1:2^i % for every block node
-            ind = (k-1)*2;
-            children = [totBod + 2^(i+1) - 1 + ind, totBod + 2^(i+1) + ind];% there are two child constraints
+            ind = 2^i+k-1;
+            children = [totBod + ind*2-1, totBod + ind*2];% there are two child constraints
 
-            cl = make_constraint(totBod + 2^(i+1) - 1 + ind, zeros(2, 3), 2^i+k-1, 2^(i+1)+ind);
-            cr = make_constraint(totBod + 2^(i+1) + ind, zeros(2, 3), 2^i+k-1, 2^(i+1)+ind+1);
+            cl = make_constraint(totBod + ind*2-1, zeros(2, 3), ind, ind*2);
+            cr = make_constraint(totBod + ind*2, zeros(2, 3), ind, ind*2+1);
 
             constraints = [constraints cl cr];
            
-            if(rowparent ~= -1)
-                currparent = rowparent + k - 1;
+            currparent = numBod+ind-1;
+            if(i==0)
+                currparent = - 1;
             end
-            b = make_test_body(2^i+k-1, Mi, currparent, children);
+            b = make_test_body(ind, Mi, currparent, children);
             bodies = [bodies b];
             z = [z; zeros(3, 1)];
         end 
-        rowparent = totBod + 2^(i+1)-1;
     end 
 end
 
@@ -223,7 +224,11 @@ for i=1:size(tall, 2)
         lambda = A\b; %inv(A)*b;
     elseif(solverType == 2) % (1b) SPARSE SOLVE
         for bi=0:size(constraints, 2)-1
-            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
+            par = floor(bi/2);
+            child = bi+1;
+            Jic = J(bi*2+1:bi*2+2, par*3+1:par*3+3);
+            Jip = J(bi*2+1:bi*2+2, child*3+1:child*3+3);
+            allnodes(numBod+bi+1).D = [Jic Jip];
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
 
@@ -233,7 +238,11 @@ for i=1:size(tall, 2)
 
     elseif(solverType == 3) % (1c) DENSE SOLVE
         for bi=0:size(constraints, 2)-1
-            allnodes(numBod+bi+1).D = J(bi*2+1:bi*2+2, bi*3+1:bi*3+6);
+            par = floor(bi/2);
+            child = bi+1;
+            Jic = J(bi*2+1:bi*2+2, par*3+1:par*3+3);
+            Jip = J(bi*2+1:bi*2+2, child*3+1:child*3+3);
+            allnodes(numBod+bi+1).D = [Jic Jip];
             z{numBod+bi+1} = -b(bi*2+1:bi*2+2);
         end
         
