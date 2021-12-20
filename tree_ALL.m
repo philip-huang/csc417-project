@@ -33,7 +33,7 @@ Fext = zeros(numBod*3,1);
 dt = 0.025; % timestep size [s]
 time = 5; % total simulation time [s]
 
-solverType = 1; % 1: A\b, 2: sparse, 3: dense
+solverType = 2; % 1: A\b, 2: sparse, 3: dense
 auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
 
 %% Get the Jacobian
@@ -206,8 +206,6 @@ ylim([-15 15])
 grid on
 for i=1:size(tall, 2)
 
-    i
-    
     t = tall(i);
 
     [allCOM, allBars, allax] = getAllBars(q,w,h,j,d,m);

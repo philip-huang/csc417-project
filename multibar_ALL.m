@@ -31,8 +31,8 @@ dt = 0.1; % timestep size [s]
 time = 10; % total simulation time [s]
 
 solverType = 2; % 1: A\b, 2: sparse, 3: dense
-auxConstraint = 1; % 1: no aux constraints, 2: auxillary constraints
-visualize = 1; % 1=visualize, otherwise=no
+auxConstraint = 2; % 1: no aux constraints, 2: auxillary constraints
+visualize = 0; % 1=visualize, otherwise=no
 
 %% Get the Jacobian
 
